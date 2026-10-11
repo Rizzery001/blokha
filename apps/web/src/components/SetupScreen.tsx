@@ -53,44 +53,51 @@ export function SetupScreen({ onStart, onBack }: { onStart: (players: LocalPlaye
 
       <div className="mt-4 space-y-3">
         {active.map((row, i) => (
-          <div key={i} className="rounded-xl bg-stone-800/70 p-3 grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_auto_auto] gap-2 items-center">
-            <span className="w-10 h-10 inline-block"><PieceGlyph color={row.color} glyph={row.pieceSet} index={i + 1} size="small" /></span>
-            <div className="flex items-center gap-2 min-w-0">
-            <input
-              data-testid={`nick-${i}`}
-              value={row.nickname}
-              maxLength={20}
-              onChange={(e) => update(i, { nickname: e.target.value })}
-              className="bg-stone-900 rounded-lg px-3 py-2 text-base font-bold outline-none focus:ring-2 ring-yellow-400 min-w-0 flex-1"
-            />
-            <button
-              type="button"
-              data-testid={`bot-${i}`}
-              onClick={() => update(i, { isBot: !row.isBot })}
-              className={`shrink-0 px-2.5 py-2 rounded-lg text-sm font-bold ${row.isBot ? 'bg-sky-500 text-white' : 'bg-stone-700 text-stone-300'}`}
-              title="Этим местом играет робот"
-            >
-              {row.isBot ? '🤖 Робот' : '🙂 Человек'}
-            </button>
+          <div key={i} className="panel rounded-xl p-3 flex flex-col gap-3" style={{ borderLeft: `5px solid ${row.color}` }} data-testid={`player-row-${i}`}>
+            <div className="flex items-center gap-2">
+              <span className="w-10 h-10 shrink-0 inline-block">
+                <PieceGlyph color={row.color} glyph={row.pieceSet} index={i + 1} size="small" />
+              </span>
+              <input
+                data-testid={`nick-${i}`}
+                value={row.nickname}
+                maxLength={20}
+                onChange={(e) => update(i, { nickname: e.target.value })}
+                aria-label="Имя игрока"
+                className="flex-1 min-w-0 bg-stone-900 rounded-lg px-3 py-2 text-base font-bold outline-none focus:ring-2 ring-yellow-400"
+              />
+              <button
+                type="button"
+                data-testid={`bot-${i}`}
+                onClick={() => update(i, { isBot: !row.isBot })}
+                className={`shrink-0 px-3 py-2 rounded-lg text-sm font-bold whitespace-nowrap ${row.isBot ? 'bg-sky-500 text-white' : 'bg-stone-700 text-stone-200'}`}
+                title="Кем играет это место"
+              >
+                {row.isBot ? '🤖 Робот' : '🙂 Человек'}
+              </button>
             </div>
-            <div className="flex gap-1 col-span-2 sm:col-span-1">
-              {CORNERS.map((c) => {
-                const taken = active.some((r, k) => k !== i && r.corner === c);
-                return (
-                  <button
-                    key={c}
-                    type="button"
-                    data-testid={`corner-${i}-${c}`}
-                    onClick={() => update(i, { corner: c })}
-                    className={`px-2 py-1.5 rounded-md text-sm font-bold ${row.corner === c ? 'bg-yellow-400 text-stone-900' : taken ? 'bg-stone-900 text-stone-600' : 'bg-stone-700'}`}
-                  >
-                    {c}
-                  </button>
-                );
-              })}
-            </div>
-            <div className="flex gap-1 col-span-2 sm:col-span-1 flex-wrap">
-              <div className="flex gap-0.5" role="radiogroup" aria-label="Набор фигур">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <div className="flex items-center gap-1">
+                <span className="text-xs mr-1" style={{ color: 'var(--muted)' }}>Угол</span>
+                {CORNERS.map((c) => {
+                  const taken = active.some((r, k) => k !== i && r.corner === c);
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      data-testid={`corner-${i}-${c}`}
+                      disabled={taken}
+                      onClick={() => update(i, { corner: c })}
+                      title={taken ? 'Угол занят другим игроком' : `Старт с ${c}`}
+                      className={`w-11 h-9 rounded-md text-sm font-bold ${row.corner === c ? 'bg-yellow-400 text-stone-900' : taken ? 'bg-stone-900 text-stone-600 line-through cursor-not-allowed' : 'bg-stone-700'}`}
+                    >
+                      {c}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-1" role="radiogroup" aria-label="Набор фигур">
+                <span className="text-xs mr-1" style={{ color: 'var(--muted)' }}>Фигуры</span>
                 {PIECE_SETS.map((s) => (
                   <button
                     key={s.id}
@@ -99,23 +106,28 @@ export function SetupScreen({ onStart, onBack }: { onStart: (players: LocalPlaye
                     aria-checked={row.pieceSet === s.id}
                     title={s.name}
                     onClick={() => update(i, { pieceSet: s.id })}
-                    className={`w-8 h-8 rounded-md text-xl leading-none ${row.pieceSet === s.id ? 'bg-yellow-400 text-stone-900' : 'bg-stone-700 text-stone-200'}`}
+                    className={`w-9 h-9 rounded-md text-xl leading-none ${row.pieceSet === s.id ? 'bg-yellow-400 text-stone-900' : 'bg-stone-700 text-stone-200'}`}
                   >
                     {s.glyph}
                   </button>
                 ))}
               </div>
-              <div className="flex gap-1">
-                {PLAYER_COLORS.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    aria-label={c.name}
-                    onClick={() => update(i, { color: c.id })}
-                    className={`w-6 h-6 rounded-full ${row.color === c.id ? 'ring-2 ring-white' : ''}`}
-                    style={{ background: c.id }}
-                  />
-                ))}
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs mr-1" style={{ color: 'var(--muted)' }}>Цвет</span>
+                {PLAYER_COLORS.map((c) => {
+                  const used = active.some((r, k) => k !== i && r.color === c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      aria-label={c.name}
+                      title={used ? `${c.name}: уже у другого игрока` : c.name}
+                      onClick={() => update(i, { color: c.id })}
+                      className={`w-7 h-7 rounded-full ${row.color === c.id ? 'ring-2 ring-white ring-offset-2 ring-offset-stone-800' : used ? 'opacity-30' : ''}`}
+                      style={{ background: c.id }}
+                    />
+                  );
+                })}
               </div>
             </div>
           </div>

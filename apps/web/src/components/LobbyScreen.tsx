@@ -62,8 +62,9 @@ export function LobbyScreen({ online, onLeave }: { online: OnlineGame; onLeave: 
                 )}
               </div>
               {mine && me && (
-                <div className="mt-2 flex flex-wrap gap-2 items-center">
-                  <div className="flex gap-1">
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs mr-1" style={{ color: 'var(--muted)' }}>Угол</span>
                     {CORNERS.map((c) => {
                       const taken = room.seats.some((s) => s.playerId !== me.playerId && s.corner === c);
                       return (
@@ -72,23 +73,26 @@ export function LobbyScreen({ online, onLeave }: { online: OnlineGame; onLeave: 
                           type="button"
                           disabled={taken}
                           onClick={() => online.updateSeat({ corner: c })}
-                          className={`px-2 py-1.5 rounded-md text-sm font-bold ${me.corner === c ? 'bg-yellow-400 text-stone-900' : taken ? 'bg-stone-900 text-stone-600' : 'bg-stone-700'}`}
+                          title={taken ? 'Угол занят' : `Старт с ${c}`}
+                          className={`w-11 h-9 rounded-md text-sm font-bold ${me.corner === c ? 'bg-yellow-400 text-stone-900' : taken ? 'bg-stone-900 text-stone-600 line-through cursor-not-allowed' : 'bg-stone-700'}`}
                         >
                           {c}
                         </button>
                       );
                     })}
                   </div>
-                  <div className="flex gap-0.5" role="radiogroup" aria-label="Набор фигур">
+                  <div className="flex items-center gap-1" role="radiogroup" aria-label="Набор фигур">
+                    <span className="text-xs mr-1" style={{ color: 'var(--muted)' }}>Фигуры</span>
                     {PIECE_SETS.map((s) => (
-                      <button key={s.id} type="button" role="radio" aria-checked={me.pieceSet === s.id} title={s.name} onClick={() => online.updateSeat({ pieceSet: s.id })} className={`w-8 h-8 rounded-md text-xl leading-none ${me.pieceSet === s.id ? 'bg-yellow-400 text-stone-900' : 'bg-stone-700 text-stone-200'}`}>
+                      <button key={s.id} type="button" role="radio" aria-checked={me.pieceSet === s.id} title={s.name} onClick={() => online.updateSeat({ pieceSet: s.id })} className={`w-9 h-9 rounded-md text-xl leading-none ${me.pieceSet === s.id ? 'bg-yellow-400 text-stone-900' : 'bg-stone-700 text-stone-200'}`}>
                         {s.glyph}
                       </button>
                     ))}
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs mr-1" style={{ color: 'var(--muted)' }}>Цвет</span>
                     {PLAYER_COLORS.map((c) => (
-                      <button key={c.id} type="button" aria-label={c.name} onClick={() => online.updateSeat({ color: c.id })} className={`w-6 h-6 rounded-full ${me.color === c.id ? 'ring-2 ring-white' : ''}`} style={{ background: c.id }} />
+                      <button key={c.id} type="button" aria-label={c.name} onClick={() => online.updateSeat({ color: c.id })} className={`w-7 h-7 rounded-full ${me.color === c.id ? 'ring-2 ring-white ring-offset-2 ring-offset-stone-800' : ''}`} style={{ background: c.id }} />
                     ))}
                   </div>
                 </div>
