@@ -1,5 +1,7 @@
 import type { GameState, LegalAction, PlayerState } from '@blokha/game-engine';
 import { PieceGlyph } from './Board';
+import { CornerIcon } from './CornerIcon';
+import { cornerName, cornerTitle } from '../game/pieceSets';
 import type { AnimOverrides } from '../game/useLocalGame';
 
 interface Props {
@@ -72,7 +74,7 @@ export function PlayerPanel({ state, player, active, spawnAction, onSpawn, overr
       <div className="flex items-center gap-2">
         <span className="font-black truncate">{isBot ? '🤖 ' : ''}{player.nickname}{isMe ? ' (вы)' : ''}</span>
         {disconnected && <span className="text-[10px] uppercase tracking-wide text-rose-300 bg-rose-900/50 px-1.5 rounded">офлайн</span>}
-        <span className="text-xs ml-auto" style={{ color: 'var(--muted)' }}>угол {player.corner}</span>
+        <span className="text-xs ml-auto inline-flex items-center gap-1" style={{ color: 'var(--muted)' }} title={cornerTitle(player.corner)}><CornerIcon corner={player.corner} color={player.color} size={14} /> {cornerName(player.corner).toLowerCase()}</span>
       </div>
       <div className="mt-2 flex items-center gap-1 min-h-[36px]">
         <span className="text-xs mr-1" style={{ color: 'var(--muted)' }}>Резерв:</span>

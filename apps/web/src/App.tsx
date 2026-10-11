@@ -132,7 +132,8 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
             Настройки · тема: {theme === 'wood' ? 'Classic Wood' : 'Modern'}
           </button>
         </div>
-        <div className="mt-10 grid grid-cols-7 gap-1.5 max-w-xs w-full text-[10px] uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
+        <div className="mt-8 text-xs" style={{ color: 'var(--muted)' }}>Четыре стартовых угла: 1 слева внизу, 2 справа внизу, 3 справа вверху, 4 слева вверху. Семь особых клеток:</div>
+        <div className="mt-2 grid grid-cols-7 gap-1.5 max-w-xs w-full text-[10px] uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
           {[['A2', '5 ▲'], ['H5', '3 ▲'], ['H7', '5 ▼'], ['D1', '−1'], ['C8', '−3'], ['E8', '+1'], ['F1', '+3']].map(([c, t]) => (
             <div key={c} className="panel rounded-md py-1.5">
               <div className="font-black text-sm" style={{ color: 'var(--fg)' }}>{t}</div>

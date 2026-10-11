@@ -1,7 +1,8 @@
 import { CORNERS, type Corner } from '@blokha/game-engine';
 import type { LocalPlayerSetup } from '../game/useLocalGame';
 import { useState } from 'react';
-import { PIECE_SETS, PLAYER_COLORS } from '../game/pieceSets';
+import { CORNER_INFO, PIECE_SETS, PLAYER_COLORS, cornerTitle } from '../game/pieceSets';
+import { CornerIcon } from './CornerIcon';
 import { PieceGlyph } from './Board';
 
 interface Row {
@@ -34,7 +35,7 @@ export function SetupScreen({ onStart, onBack }: { onStart: (players: LocalPlaye
     <div className="max-w-2xl mx-auto p-4 sm:p-6">
       <button type="button" onClick={onBack} className="text-stone-400 hover:text-white text-sm">← Назад</button>
       <h2 className="text-2xl sm:text-3xl font-black mt-2">Локальная партия</h2>
-      <p className="text-stone-400 text-sm mt-1">Все игроки за одним устройством. Любое место можно отдать роботу. Очередность — по порядку в списке.</p>
+      <p className="text-stone-400 text-sm mt-1">Все игроки за одним устройством. Любое место можно отдать роботу. Очередность — по порядку в списке. Угол — откуда стартуют фигуры: 1 слева внизу, 2 справа внизу, 3 справа вверху, 4 слева вверху.</p>
 
       <div className="mt-4 flex items-center gap-2">
         <span className="text-sm">Игроков:</span>
@@ -88,10 +89,11 @@ export function SetupScreen({ onStart, onBack }: { onStart: (players: LocalPlaye
                       data-testid={`corner-${i}-${c}`}
                       disabled={taken}
                       onClick={() => update(i, { corner: c })}
-                      title={taken ? 'Угол занят другим игроком' : `Старт с ${c}`}
-                      className={`w-11 h-9 rounded-md text-sm font-bold ${row.corner === c ? 'bg-yellow-400 text-stone-900' : taken ? 'bg-stone-900 text-stone-600 line-through cursor-not-allowed' : 'bg-stone-700'}`}
+                      title={taken ? 'Этот угол уже занят другим игроком' : cornerTitle(c)}
+                      className={`h-9 px-2 rounded-md text-sm font-bold inline-flex items-center gap-1 ${row.corner === c ? 'bg-yellow-400 text-stone-900' : taken ? 'bg-stone-900 text-stone-600 cursor-not-allowed' : 'bg-stone-700'}`}
                     >
-                      {c}
+                      <CornerIcon corner={c} color={taken ? 'currentColor' : row.corner === c ? '#1c1917' : row.color} />
+                      {CORNER_INFO[c].num}
                     </button>
                   );
                 })}

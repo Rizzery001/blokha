@@ -198,7 +198,7 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
               <div className="panel rounded-3xl p-6 sm:p-8 text-center max-w-sm w-full animate-pop shadow-2xl" style={{ borderColor: 'var(--accent)', borderWidth: 2 }}>
                 <div className="text-6xl">🏆</div>
                 <div className="text-2xl font-black mt-2" style={{ color: winner.color }}>{winner.nickname}</div>
-                <div className="mt-1" style={{ color: 'var(--muted)' }}>заполнил всю диагональ от {winner.corner}!</div>
+                <div className="mt-1" style={{ color: 'var(--muted)' }}>заполнил всю свою финишную диагональ!</div>
                 {canStartNew ? (
                   <button type="button" onClick={onNewGame} className="btn-primary mt-5 w-full py-3 rounded-xl font-black">Новая партия</button>
                 ) : (

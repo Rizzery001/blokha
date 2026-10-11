@@ -1,6 +1,7 @@
 import { CORNERS } from '@blokha/game-engine';
 import { useState } from 'react';
-import { PIECE_SETS, PLAYER_COLORS } from '../game/pieceSets';
+import { CORNER_INFO, PIECE_SETS, PLAYER_COLORS, cornerName, cornerTitle } from '../game/pieceSets';
+import { CornerIcon } from './CornerIcon';
 import type { OnlineGame } from '../game/useOnlineGame';
 import { PieceGlyph } from './Board';
 
@@ -56,7 +57,7 @@ export function LobbyScreen({ online, onLeave }: { online: OnlineGame; onLeave: 
                 <span className="font-black truncate">{seat.isBot ? '🤖 ' : ''}{seat.nickname}{mine ? ' (вы)' : ''}</span>
                 {seat.isHost && <span className="text-[10px] uppercase tracking-wide bg-yellow-400/20 text-yellow-300 px-1.5 rounded">хозяин</span>}
                 {!seat.connected && !seat.isBot && <span className="text-[10px] uppercase tracking-wide bg-rose-900/50 text-rose-300 px-1.5 rounded">офлайн</span>}
-                <span className="ml-auto text-sm text-stone-400">угол {seat.corner}</span>
+                <span className="ml-auto text-sm text-stone-400 inline-flex items-center gap-1" title={cornerTitle(seat.corner)}><CornerIcon corner={seat.corner} color={seat.color} /> {cornerName(seat.corner)}</span>
                 {seat.isBot && isHost && (
                   <button type="button" onClick={() => online.removeBot(seat.playerId)} className="text-xs text-rose-300 hover:text-rose-100">убрать</button>
                 )}
@@ -73,10 +74,11 @@ export function LobbyScreen({ online, onLeave }: { online: OnlineGame; onLeave: 
                           type="button"
                           disabled={taken}
                           onClick={() => online.updateSeat({ corner: c })}
-                          title={taken ? 'Угол занят' : `Старт с ${c}`}
-                          className={`w-11 h-9 rounded-md text-sm font-bold ${me.corner === c ? 'bg-yellow-400 text-stone-900' : taken ? 'bg-stone-900 text-stone-600 line-through cursor-not-allowed' : 'bg-stone-700'}`}
+                          title={taken ? 'Этот угол уже занят' : cornerTitle(c)}
+                          className={`h-9 px-2 rounded-md text-sm font-bold inline-flex items-center gap-1 ${me.corner === c ? 'bg-yellow-400 text-stone-900' : taken ? 'bg-stone-900 text-stone-600 cursor-not-allowed' : 'bg-stone-700'}`}
                         >
-                          {c}
+                          <CornerIcon corner={c} color={taken ? 'currentColor' : me.corner === c ? '#1c1917' : me.color} />
+                          {CORNER_INFO[c].num}
                         </button>
                       );
                     })}
