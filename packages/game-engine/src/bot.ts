@@ -62,13 +62,61 @@ export function scoreAction(state: GameState, playerId: string, action: LegalAct
   return score;
 }
 
-export function chooseBotAction(state: GameState, playerId: string, random: () => number = Math.random): LegalAction {
+export type BotLevel = 'easy' | 'normal' | 'hard';
+
+/**
+ * «Сильный» уровень: к эвристике добавляется оценка позиции после хода —
+ * сколько своих фигур под ударом (чужая фигура в 1..6 клетках позади) и сколько чужих под нашим ударом.
+ */
+function positionScore(state: GameState, playerId: string, action: LegalAction): number {
+  const { config } = state;
+  const lap = lapLength(config);
+  const player = getPlayer(state, playerId);
+  const occupancy = buildOccupancy(state);
+  // виртуально переставляем фигуру
+  const mine = new Map<string, number>();
+  for (const p of player.pieces) if (p.progress !== null) mine.set(p.id, p.progress);
+  if (action.type === 'spawn') mine.set(action.pieceId, 0);
+  else mine.set(action.pieceId, action.toProgress);
+  const capturedId = action.captures?.pieceId ?? null;
+  let score = 0;
+  for (const [, prog] of mine) {
+    if (prog > lap) continue;
+    const cell = getCellForProgress(config, player.corner, prog);
+    for (let back = 1; back <= config.diceSides; back++) {
+      const behind = getCellForProgress(config, player.corner, prog - back);
+      const occ = occupancy.get(behind);
+      if (occ && occ.player.id !== playerId && occ.piece.id !== capturedId && occ.piece.progress !== null && occ.piece.progress <= lap) {
+        // чем дальше наша фигура продвинулась, тем дороже её потерять
+        score -= (1 + prog / lap) * 1.6;
+      }
+    }
+    // чужие фигуры впереди в 1..6: потенциальная добыча на следующем броске
+    for (let fwd = 1; fwd <= config.diceSides; fwd++) {
+      if (prog + fwd > lap) break;
+      const ahead = getCellForProgress(config, player.corner, prog + fwd);
+      const occ = occupancy.get(ahead);
+      if (occ && occ.player.id !== playerId && occ.piece.id !== capturedId) score += 0.6;
+    }
+    void cell;
+  }
+  return score;
+}
+
+export function chooseBotAction(state: GameState, playerId: string, random: () => number = Math.random, level: BotLevel = 'normal'): LegalAction {
   const actions = state.legalActions;
   if (actions.length === 0) throw new Error('Нет легальных действий');
+  if (level === 'easy') {
+    // простой: выбивает, если может, иначе случайный ход
+    const cap = actions.filter((a) => a.captures);
+    const pool = cap.length > 0 && random() < 0.7 ? cap : actions;
+    return pool[Math.floor(random() * pool.length)]!;
+  }
   let best = actions[0]!;
   let bestScore = -Infinity;
   for (const a of actions) {
-    const s = scoreAction(state, playerId, a, random);
+    let s = scoreAction(state, playerId, a, random);
+    if (level === 'hard') s += positionScore(state, playerId, a);
     if (s > bestScore) {
       bestScore = s;
       best = a;

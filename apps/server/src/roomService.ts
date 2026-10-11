@@ -6,6 +6,7 @@ import {
   currentPlayer,
   CORNERS,
   EngineError,
+  type BotLevel,
   type Corner,
   type GameEvent,
 } from '@blokha/game-engine';
@@ -33,6 +34,7 @@ export class RoomError extends Error {
 const PIECE_SETS = ['pawn', 'knight', 'rook', 'bishop', 'queen', 'king'];
 const COLORS = ['#e8590c', '#1c7ed6', '#2f9e44', '#9c36b5', '#e03131', '#0ca678'];
 const BOT_NAMES = ['Робот Шура', 'Робот Кеша', 'Робот Фима', 'Робот Зина'];
+const BOT_LEVELS: BotLevel[] = ['easy', 'normal', 'hard'];
 const MAX_SEATS = 4;
 const MIN_SEATS = 2;
 export const ROOM_TTL_MS = 6 * 60 * 60 * 1000;
@@ -88,8 +90,9 @@ export class RoomService {
       corner: this.freeCorner(room),
       pieceSet: this.pick(PIECE_SETS, used),
       color: this.pick(COLORS, usedColors),
-      connected: !isBot ? true : true,
+      connected: true,
       isBot,
+      botLevel: 'normal',
     };
   }
 
@@ -113,10 +116,13 @@ export class RoomService {
         connected: s.connected,
         isHost: s.playerId === room.hostId,
         isBot: s.isBot,
+        botLevel: s.isBot ? s.botLevel : null,
       })),
       game: room.game,
       version: room.version,
       createdAt: room.createdAt,
+      series: room.series ?? {},
+      gamesPlayed: room.gamesPlayed ?? 0,
     };
   }
 
@@ -147,6 +153,8 @@ export class RoomService {
       version: 0,
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      series: {},
+      gamesPlayed: 0,
     };
     const seat = this.makeSeat(room, nickname, false);
     room.seats.push(seat);
@@ -210,16 +218,61 @@ export class RoomService {
     return room;
   }
 
-  addBot(creds: Credentials): Room {
+  addBot(creds: Credentials, level: BotLevel = 'normal'): Room {
     const { room, seat } = this.authenticate(creds);
     if (room.hostId !== seat.playerId) throw new RoomError('notHost', 'Только хозяин комнаты добавляет роботов');
     if (room.status !== 'lobby') throw new RoomError('notInLobby', 'Роботов можно добавить только в лобби');
     if (room.seats.length >= MAX_SEATS) throw new RoomError('roomFull', 'Комната заполнена');
+    if (!BOT_LEVELS.includes(level)) throw new RoomError('badRequest', 'Неизвестный уровень робота');
     const used = new Set(room.seats.map((s) => s.nickname));
     const name = BOT_NAMES.find((n) => !used.has(n)) ?? `Робот ${room.seats.length + 1}`;
-    room.seats.push(this.makeSeat(room, name, true));
+    const bot = this.makeSeat(room, name, true);
+    bot.botLevel = level;
+    room.seats.push(bot);
     this.store.save(room);
     return room;
+  }
+
+  setBotLevel(creds: Credentials, playerId: string, level: BotLevel): Room {
+    const { room, seat } = this.authenticate(creds);
+    if (room.hostId !== seat.playerId) throw new RoomError('notHost', 'Только хозяин комнаты');
+    if (!BOT_LEVELS.includes(level)) throw new RoomError('badRequest', 'Неизвестный уровень робота');
+    const bot = room.seats.find((s) => s.playerId === playerId && s.isBot);
+    if (!bot) throw new RoomError('badRequest', 'Робот не найден');
+    bot.botLevel = level;
+    this.store.save(room);
+    return room;
+  }
+
+  /** Отключившегося человека заменяет робот: во время партии он доигрывает его фигурами, в лобби место освобождается. */
+  replaceWithBot(creds: Credentials, playerId: string): Room {
+    const { room, seat } = this.authenticate(creds);
+    if (room.hostId !== seat.playerId) throw new RoomError('notHost', 'Только хозяин комнаты');
+    const target = room.seats.find((s) => s.playerId === playerId && !s.isBot);
+    if (!target) throw new RoomError('badRequest', 'Игрок не найден');
+    if (target.playerId === seat.playerId) throw new RoomError('badRequest', 'Нельзя заменить самого себя');
+    if (target.connected) throw new RoomError('badRequest', 'Игрок на связи, заменить можно только отключившегося');
+    if (room.status === 'lobby') {
+      room.seats = room.seats.filter((s) => s !== target);
+    } else {
+      target.isBot = true;
+      target.botLevel = 'normal';
+      target.token = randomBytes(24).toString('hex'); // старый токен больше не даёт управлять местом
+      target.nickname = `🤖 ${target.nickname}`.slice(0, 24);
+      target.connected = true;
+      if (room.game) {
+        const gp = room.game.players.find((p) => p.id === target.playerId);
+        if (gp) gp.nickname = target.nickname;
+      }
+    }
+    this.store.save(room);
+    return room;
+  }
+
+  react(creds: Credentials, emoji: string): { room: Room; playerId: string } {
+    const { room, seat } = this.authenticate(creds);
+    return { room, playerId: seat.playerId };
+    void emoji;
   }
 
   removeBot(creds: Credentials, playerId: string): Room {
@@ -298,7 +351,12 @@ export class RoomService {
     }
     room.game = result.state;
     room.version = result.state.version;
-    if (result.state.phase === 'finished') room.status = 'finished';
+    if (result.state.phase === 'finished') {
+      room.status = 'finished';
+      room.series ??= {};
+      room.gamesPlayed = (room.gamesPlayed ?? 0) + 1;
+      if (result.state.winnerId) room.series[result.state.winnerId] = (room.series[result.state.winnerId] ?? 0) + 1;
+    }
     this.store.save(room);
     return { version: room.version, state: result.state, events: result.events };
   }
@@ -329,7 +387,7 @@ export class RoomService {
     const game = room.game;
     const update = this.applyGame(room, cur.id, room.version, () => {
       if (game.phase === 'awaitingRoll') return applyCommand(game, { type: 'roll', playerId: cur.id, value: this.dice() });
-      const action = chooseBotAction(game, cur.id, this.random);
+      const action = chooseBotAction(game, cur.id, this.random, seat.botLevel ?? 'normal');
       return applyCommand(game, { type: 'chooseAction', playerId: cur.id, actionId: action.id });
     });
     return { room, update };

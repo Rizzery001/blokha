@@ -3,6 +3,17 @@ import { applyCommand, chooseBotAction, createGame, currentPlayer, type Corner }
 import { newGame, place, roll } from './helpers';
 
 describe('робот', () => {
+  it('уровни easy/normal/hard возвращают только легальные действия', () => {
+    let s = place(place(newGame(), 'p1', 0, 0), 'p1', 1, 3);
+    s = place(s, 'p2', 0, 11);
+    const r = roll(s, 1);
+    for (const level of ['easy', 'normal', 'hard'] as const) {
+      const a = chooseBotAction(r.state, 'p1', () => 0.5, level);
+      expect(r.state.legalActions.some((x) => x.id === a.id)).toBe(true);
+    }
+    expect(chooseBotAction(r.state, 'p1', () => 0.1, 'hard').captures).not.toBeNull();
+  });
+
   it('выбирает только легальные действия и предпочитает выбивание', () => {
     // p1 (A1): фигура на A1 (0) и на A4 (3); p2 на A5 (H1 + 11). Бросок 1: A1→A2 (бонус) или A4→A5 (выбивание)
     let s = place(place(newGame(), 'p1', 0, 0), 'p1', 1, 3);

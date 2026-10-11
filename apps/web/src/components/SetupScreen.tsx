@@ -1,8 +1,14 @@
-import { CORNERS, type Corner } from '@blokha/game-engine';
+import { CORNERS, type BotLevel, type Corner } from '@blokha/game-engine';
 import type { LocalPlayerSetup } from '../game/useLocalGame';
 import { useState } from 'react';
 import { CORNER_INFO, PIECE_SETS, PLAYER_COLORS, cornerTitle } from '../game/pieceSets';
 import { CornerIcon } from './CornerIcon';
+
+export const BOT_LEVELS: { id: BotLevel; name: string }[] = [
+  { id: 'easy', name: 'Простой' },
+  { id: 'normal', name: 'Обычный' },
+  { id: 'hard', name: 'Сильный' },
+];
 import { PieceGlyph } from './Board';
 
 interface Row {
@@ -11,17 +17,18 @@ interface Row {
   pieceSet: string;
   color: string;
   isBot: boolean;
+  botLevel: BotLevel;
 }
 
 const DEFAULT_ROWS: Row[] = [
-  { nickname: 'Игрок 1', corner: 'A1', pieceSet: 'pawn', color: PLAYER_COLORS[0]!.id, isBot: false },
-  { nickname: 'Робот Шура', corner: 'H8', pieceSet: 'knight', color: PLAYER_COLORS[1]!.id, isBot: true },
-  { nickname: 'Робот Кеша', corner: 'H1', pieceSet: 'rook', color: PLAYER_COLORS[2]!.id, isBot: true },
-  { nickname: 'Робот Фима', corner: 'A8', pieceSet: 'bishop', color: PLAYER_COLORS[3]!.id, isBot: true },
+  { nickname: 'Игрок 1', corner: 'A1', pieceSet: 'pawn', color: PLAYER_COLORS[0]!.id, isBot: false, botLevel: 'normal' },
+  { nickname: 'Робот Шура', corner: 'H8', pieceSet: 'knight', color: PLAYER_COLORS[1]!.id, isBot: true, botLevel: 'normal' },
+  { nickname: 'Робот Кеша', corner: 'H1', pieceSet: 'rook', color: PLAYER_COLORS[2]!.id, isBot: true, botLevel: 'easy' },
+  { nickname: 'Робот Фима', corner: 'A8', pieceSet: 'bishop', color: PLAYER_COLORS[3]!.id, isBot: true, botLevel: 'hard' },
 ];
 
 export function buildPlayers(rows: Row[]): LocalPlayerSetup[] {
-  return rows.map((r, i) => ({ id: `p${i + 1}`, nickname: r.nickname.trim() || `Игрок ${i + 1}`, corner: r.corner, pieceSet: r.pieceSet, color: r.color, isBot: r.isBot }));
+  return rows.map((r, i) => ({ id: `p${i + 1}`, nickname: r.nickname.trim() || `Игрок ${i + 1}`, corner: r.corner, pieceSet: r.pieceSet, color: r.color, isBot: r.isBot, botLevel: r.botLevel }));
 }
 
 export function SetupScreen({ onStart, onBack }: { onStart: (players: LocalPlayerSetup[]) => void; onBack: () => void }) {
@@ -67,6 +74,19 @@ export function SetupScreen({ onStart, onBack }: { onStart: (players: LocalPlaye
                 aria-label="Имя игрока"
                 className="flex-1 min-w-0 bg-stone-900 rounded-lg px-3 py-2 text-base font-bold outline-none focus:ring-2 ring-yellow-400"
               />
+              {row.isBot && (
+                <select
+                  value={row.botLevel}
+                  onChange={(e) => update(i, { botLevel: e.target.value as BotLevel })}
+                  aria-label="Уровень робота"
+                  data-testid={`bot-level-${i}`}
+                  className="shrink-0 bg-stone-900 rounded-lg px-2 py-2 text-sm font-bold"
+                >
+                  {BOT_LEVELS.map((l) => (
+                    <option key={l.id} value={l.id}>{l.name}</option>
+                  ))}
+                </select>
+              )}
               <button
                 type="button"
                 data-testid={`bot-${i}`}

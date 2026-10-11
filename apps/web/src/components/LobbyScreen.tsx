@@ -1,5 +1,8 @@
 import { CORNERS } from '@blokha/game-engine';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import QRCode from 'qrcode';
+import type { BotLevel } from '@blokha/game-engine';
+import { BOT_LEVELS } from './SetupScreen';
 import { CORNER_INFO, PIECE_SETS, PLAYER_COLORS, cornerName, cornerTitle } from '../game/pieceSets';
 import { CornerIcon } from './CornerIcon';
 import type { OnlineGame } from '../game/useOnlineGame';
@@ -18,6 +21,10 @@ export function LobbyScreen({ online, onLeave }: { online: OnlineGame; onLeave: 
   const me = room.seats.find((s) => s.playerId === online.myPlayerId);
   const isHost = room.hostId === online.myPlayerId;
   const [copied, setCopied] = useState(false);
+  const [qr, setQr] = useState<string>('');
+  useEffect(() => {
+    QRCode.toDataURL(inviteLink(room.code), { margin: 1, width: 220, color: { dark: '#1b1512', light: '#f4ebdd' } }).then(setQr).catch(() => setQr(''));
+  }, [room.code]);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(inviteLink(room.code));
@@ -45,7 +52,16 @@ export function LobbyScreen({ online, onLeave }: { online: OnlineGame; onLeave: 
           {copied ? 'Скопировано ✓' : 'Скопировать ссылку'}
         </button>
       </div>
-      <p className="text-stone-400 text-xs mt-2 break-all">{inviteLink(room.code)}</p>
+      <div className="mt-2 flex items-center gap-3">
+        {qr && <img src={qr} alt="QR-код ссылки на комнату" className="w-24 h-24 sm:w-28 sm:h-28 rounded-lg" data-testid="qr" />}
+        <div className="text-xs min-w-0" style={{ color: 'var(--muted)' }}>
+          <div>Наведите камеру телефона на QR-код или отправьте ссылку:</div>
+          <div className="break-all mt-1">{inviteLink(room.code)}</div>
+          {room.gamesPlayed > 0 && (
+            <div className="mt-2 text-amber-300">Счёт серии: {room.seats.map((s) => `${s.nickname} ${room.series[s.playerId] ?? 0}`).join(' : ')}</div>
+          )}
+        </div>
+      </div>
 
       <div className="mt-4 space-y-2">
         {room.seats.map((seat, i) => {
@@ -59,7 +75,23 @@ export function LobbyScreen({ online, onLeave }: { online: OnlineGame; onLeave: 
                 {!seat.connected && !seat.isBot && <span className="text-[10px] uppercase tracking-wide bg-rose-900/50 text-rose-300 px-1.5 rounded">офлайн</span>}
                 <span className="ml-auto text-sm text-stone-400 inline-flex items-center gap-1" title={cornerTitle(seat.corner)}><CornerIcon corner={seat.corner} color={seat.color} /> {cornerName(seat.corner)}</span>
                 {seat.isBot && isHost && (
-                  <button type="button" onClick={() => online.removeBot(seat.playerId)} className="text-xs text-rose-300 hover:text-rose-100">убрать</button>
+                  <>
+                    <select
+                      value={seat.botLevel ?? 'normal'}
+                      onChange={(e) => online.setBotLevel(seat.playerId, e.target.value as BotLevel)}
+                      aria-label="Уровень робота"
+                      className="bg-stone-900 rounded-md px-1.5 py-1 text-xs font-bold"
+                    >
+                      {BOT_LEVELS.map((l) => (
+                        <option key={l.id} value={l.id}>{l.name}</option>
+                      ))}
+                    </select>
+                    <button type="button" onClick={() => online.removeBot(seat.playerId)} className="text-xs text-rose-300 hover:text-rose-100">убрать</button>
+                  </>
+                )}
+                {seat.isBot && !isHost && <span className="text-xs" style={{ color: 'var(--muted)' }}>{BOT_LEVELS.find((l) => l.id === seat.botLevel)?.name}</span>}
+                {!seat.isBot && !seat.connected && isHost && !mine && (
+                  <button type="button" onClick={() => online.replaceWithBot(seat.playerId)} className="text-xs text-rose-300 hover:text-rose-100">убрать</button>
                 )}
               </div>
               {mine && me && (
@@ -106,7 +138,13 @@ export function LobbyScreen({ online, onLeave }: { online: OnlineGame; onLeave: 
           <div className="rounded-xl p-3 border-2 border-dashed border-stone-700 text-stone-500 text-sm flex items-center gap-3">
             Свободное место — отправьте ссылку другу
             {isHost && (
-              <button type="button" data-testid="add-bot" onClick={() => online.addBot()} className="ml-auto px-3 py-1.5 rounded-lg bg-sky-600 text-white font-bold text-sm">+ Робот</button>
+              <div className="ml-auto flex gap-1">
+                {BOT_LEVELS.map((l) => (
+                  <button key={l.id} type="button" data-testid={l.id === 'normal' ? 'add-bot' : `add-bot-${l.id}`} onClick={() => online.addBot(l.id)} className="px-2.5 py-1.5 rounded-lg bg-sky-600 text-white font-bold text-xs" title={`Добавить робота: ${l.name}`}>
+                    + 🤖 {l.name}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         )}

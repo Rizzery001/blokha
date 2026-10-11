@@ -1,5 +1,7 @@
 import { createGame, type Cell, type GameEvent, type GameState, type PlayerSetup } from '@blokha/game-engine';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { newAchievements, type Achievement } from './achievements';
+import { sfx } from './sound';
 
 export interface LogEntry {
   id: number;
@@ -72,7 +74,8 @@ export function describeEvent(state: GameState, e: GameEvent): LogEntry | null {
 export interface Notice {
   id: number;
   text: string;
-  tone: 'good' | 'bad' | 'info';
+  tone: 'good' | 'bad' | 'info' | 'achievement';
+  icon?: string;
 }
 
 /** Стрелка авто-перемещения, показываемая поверх доски во время анимации. */
@@ -95,6 +98,10 @@ export interface Presenter {
   arrow: ArrowOverlay | null;
   /** клетка, на которой только что произошло выбивание (для эффекта) */
   captureCell: Cell | null;
+  /** тряска доски (выбивание) */
+  shake: boolean;
+  /** достижения за партию: playerId → список */
+  achievements: Record<string, Achievement[]>;
   /** принять новое состояние с событиями: анимировать и опубликовать */
   ingest: (next: GameState, events: GameEvent[]) => Promise<void>;
   /** мгновенно показать состояние без анимации (восстановление) */
@@ -120,10 +127,14 @@ export function usePresenter(): Presenter {
   const [captureCell, setCaptureCell] = useState<Cell | null>(null);
   const logId = useRef(1);
   const noticeId = useRef(1);
-  const notify = useCallback((text: string, tone: Notice['tone']) => {
+  const [shake, setShake] = useState(false);
+  const [achievements, setAchievements] = useState<Record<string, Achievement[]>>({});
+  const notify = useCallback((text: string, tone: Notice['tone'], icon?: string) => {
     const id = noticeId.current++;
-    setNotices((prev) => [...prev.slice(-3), { id, text, tone }]);
-    setTimeout(() => setNotices((prev) => prev.filter((n) => n.id !== id)), FAST ? 50 : 2600);
+    const n: Notice = { id, text, tone };
+    if (icon) n.icon = icon;
+    setNotices((prev) => [...prev.slice(-3), n]);
+    setTimeout(() => setNotices((prev) => prev.filter((x) => x.id !== id)), FAST ? 50 : tone === 'achievement' ? 3600 : 2600);
   }, []);
   const stateRef = useRef<GameState | null>(null);
   const mounted = useRef(true);
@@ -157,20 +168,28 @@ export function usePresenter(): Presenter {
       const name = (id: string) => next.players.find((p) => p.id === id)?.nickname ?? id;
       if (e.type === 'rolled') {
         setRolling(true);
+        sfx.dice();
         await sleep(DICE_SPIN_MS);
         setLastRoll(e.value);
         setRolling(false);
-        if (e.sixBonusGranted) notify('Шестёрка! +1 бросок', 'good');
+        sfx.land();
+        if (e.sixBonusGranted) {
+          notify('Шестёрка! +1 бросок', 'good');
+          sfx.six();
+        }
         await sleep(DICE_SETTLE_MS);
       } else if (e.type === 'moved') {
         if (e.kind !== 'normal') {
           setArrow({ from: e.from, to: e.to, kind: e.kind });
           notify(e.kind === 'autoForward' ? `${e.from}: ${e.path.length} вперёд!` : `${e.from}: ${e.path.length} назад`, e.kind === 'autoForward' ? 'good' : 'bad');
+          if (e.kind === 'autoForward') sfx.autoForward();
+          else sfx.autoBackward();
           await sleep(FAST ? 0 : 350);
         }
         for (const cell of e.path) {
           ov[e.pieceId] = cell;
           setOverrides({ ...ov });
+          sfx.step();
           await sleep(STEP_MS);
         }
         if (e.kind === 'normal') {
@@ -188,10 +207,14 @@ export function usePresenter(): Presenter {
       } else if (e.type === 'spawned') {
         ov[e.pieceId] = e.cell;
         setOverrides({ ...ov });
+        sfx.spawn();
         await sleep(STEP_MS);
       } else if (e.type === 'captured') {
         setFlashCell(e.cell);
         setCaptureCell(e.cell);
+        setShake(true);
+        setTimeout(() => setShake(false), 500);
+        sfx.capture();
         notify(`${name(e.byPlayerId)} выбил фигуру: ${name(e.victimPlayerId)} → в резерв`, 'good');
         await sleep(STEP_MS * 2);
         ov[e.victimPieceId] = '__reserve' as Cell;
@@ -206,16 +229,37 @@ export function usePresenter(): Presenter {
         setFlashCell(null);
       } else if (e.type === 'rollBurned') {
         notify(`Ходов нет: бросок ${e.value} сгорел`, 'bad');
+        sfx.burned();
         await sleep(FAST ? 0 : 500);
       } else if (e.type === 'turnBalance') {
+        if (e.rolls > 0) sfx.bonus();
+        else sfx.penalty();
         notify(e.rolls > 0 ? `${e.cell}: +${e.rolls} доп. ${e.rolls === 1 ? 'бросок' : 'броска'}` : `${e.cell}: пропуск ${-e.rolls} → бонусов ${e.bonusRollsRemaining}, пропусков ${e.skippedTurnsRemaining}`, e.rolls > 0 ? 'good' : 'bad');
         await sleep(FAST ? 0 : 500);
       } else if (e.type === 'turnSkipped') {
         notify(`${name(e.playerId)} пропускает очередь`, 'bad');
         await sleep(FAST ? 0 : 500);
+      } else if (e.type === 'gameFinished') {
+        sfx.win();
       }
     }
     setOverrides({});
+    // достижения: сравниваем статистику до и после
+    const earned = newAchievements(stateRef.current, next);
+    if (earned.length > 0) {
+      setAchievements((prev) => {
+        const copy = { ...prev };
+        for (const { playerId, achievement } of earned) {
+          const list = copy[playerId] ?? [];
+          if (!list.some((a) => a.id === achievement.id)) copy[playerId] = [...list, achievement];
+        }
+        return copy;
+      });
+      for (const { playerId, achievement } of earned) {
+        notify(`${next.players.find((p) => p.id === playerId)?.nickname ?? ''}: ${achievement.title} — ${achievement.description}`, 'achievement', achievement.icon);
+      }
+      sfx.achievement();
+    }
     commit(next);
     pushLog(next, events);
     setAnimating(false);
@@ -246,6 +290,7 @@ export function usePresenter(): Presenter {
       setLog([]);
       setLastRoll(null);
       setOverrides({});
+      setAchievements({});
       commit(res.state);
       pushLog(res.state, res.events);
       return res;
@@ -259,7 +304,8 @@ export function usePresenter(): Presenter {
     setOverrides({});
     setLastRoll(null);
     setRolling(false);
+    setAchievements({});
   }, [commit]);
 
-  return { state, log, animating, overrides, lastRoll, rolling, flashCell, notices, arrow, captureCell, ingest, setImmediate, startFresh, reset, stateRef, setRolling, busy: animating || rolling };
+  return { state, log, animating, overrides, lastRoll, rolling, flashCell, notices, arrow, captureCell, shake, achievements, ingest, setImmediate, startFresh, reset, stateRef, setRolling, busy: animating || rolling };
 }

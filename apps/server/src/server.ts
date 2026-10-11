@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import express from 'express';
 import { Server, type Socket } from 'socket.io';
-import type { Ack, ClientToServerEvents, Credentials, ServerToClientEvents } from '@blokha/shared';
+import { REACTIONS, type Ack, type ClientToServerEvents, type Credentials, type ServerToClientEvents } from '@blokha/shared';
 import { InMemoryRoomStore, type RoomStore } from './roomStore';
 import { RoomError, RoomService } from './roomService';
 
@@ -138,9 +138,37 @@ export function createBlokhaServer(opts: BlokhaServerOptions = {}): BlokhaServer
         return { ok: true };
       }),
     );
-    socket.on('room:addBot', (_p, ack) =>
+    socket.on('room:addBot', (payload, ack) =>
       withAuth(socket, ack, (creds) => {
-        broadcastRoom(service.addBot(creds).code);
+        broadcastRoom(service.addBot(creds, payload?.level ?? 'normal').code);
+        return { ok: true };
+      }),
+    );
+    socket.on('room:setBotLevel', (payload, ack) =>
+      withAuth(socket, ack, (creds) => {
+        broadcastRoom(service.setBotLevel(creds, String(payload?.playerId ?? ''), payload?.level ?? 'normal').code);
+        return { ok: true };
+      }),
+    );
+    socket.on('room:replaceWithBot', (payload, ack) =>
+      withAuth(socket, ack, (creds) => {
+        const room = service.replaceWithBot(creds, String(payload?.playerId ?? ''));
+        broadcastRoom(room.code);
+        scheduleBots(room.code);
+        return { ok: true };
+      }),
+    );
+    const lastReaction = new Map<string, number>();
+    socket.on('room:react', (payload, ack) =>
+      withAuth(socket, ack, (creds) => {
+        const emoji = payload?.emoji;
+        if (!REACTIONS.includes(emoji)) return fail('badRequest', 'Неизвестная реакция');
+        const now = Date.now();
+        const key = `${creds.code}:${creds.playerId}`;
+        if (now - (lastReaction.get(key) ?? 0) < 1500) return { ok: true };
+        lastReaction.set(key, now);
+        const { room, playerId } = service.react(creds, emoji);
+        io.to(roomChannel(room.code)).emit('room:reaction', { playerId, emoji, at: now });
         return { ok: true };
       }),
     );

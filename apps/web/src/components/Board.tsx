@@ -68,9 +68,13 @@ interface Props {
   captureCell: Cell | null;
   /** бросок кубика поверх доски */
   dice: { value: number | null; rolling: boolean; show: boolean };
+  /** предпросмотр хода при наведении: путь и конечная клетка */
+  preview: LegalAction | null;
+  onPieceHover: (pieceId: string | null) => void;
+  shake: boolean;
 }
 
-export function Board({ state, overrides, theme, selectableActions, onPieceClick, flashCell, highlightTargets, arrow, captureCell, dice }: Props) {
+export function Board({ state, overrides, theme, selectableActions, onPieceClick, flashCell, highlightTargets, arrow, captureCell, dice, preview, onPieceHover, shake }: Props) {
   const pieces = piecesOnBoard(state, overrides);
   const byCell = new Map<Cell, BoardPiece>();
   for (const p of pieces) byCell.set(p.cell, p);
@@ -88,10 +92,13 @@ export function Board({ state, overrides, theme, selectableActions, onPieceClick
   };
 
   const arrowPath = arrow ? buildArrowPath(arrow, state) : null;
+  const previewPath = new Set<Cell>(preview && preview.type === 'move' ? preview.path.slice(0, -1) : []);
+  const previewDest = preview ? preview.to : null;
+  const previewLine = preview && preview.type === 'move' ? [preview.from, ...preview.path].map(cellCenter).map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ') : null;
 
   return (
     <div className={`theme-${theme} w-full max-w-[min(94vw,640px)] mx-auto select-none`} data-testid="board">
-      <div className="board-frame rounded-2xl p-1.5 sm:p-2.5 relative">
+      <div className={`board-frame rounded-2xl p-1.5 sm:p-2.5 relative ${shake ? 'board-shake' : ''}`}>
         <div
           className="board-grid grid gap-0 rounded-md overflow-hidden aspect-square w-full"
           style={{ gridTemplateColumns: 'minmax(0,1fr) repeat(8, minmax(0, 2.2fr)) minmax(0,1fr)', gridTemplateRows: 'minmax(0,1fr) repeat(8, minmax(0, 2.2fr)) minmax(0,1fr)' }}
@@ -107,13 +114,15 @@ export function Board({ state, overrides, theme, selectableActions, onPieceClick
             const home = homeOwner.get(cell);
             const isCorner = ['A1', 'H1', 'H8', 'A8'].includes(cell);
             const isSel = piece ? selectable.has(piece.pieceId) : false;
-            const isTarget = targets.has(cell);
+            const isTarget = targets.has(cell) && (!preview || previewDest === cell);
             const isFlash = flashCell === cell;
+            const onPath = previewPath.has(cell);
+            const isPreviewDest = previewDest === cell;
             const cellEl = (
               <div
                 key={cell}
                 data-testid={`cell-${cell}`}
-                className={`relative min-h-0 min-w-0 ${dark ? 'cell-dark' : 'cell-light'} ${special ? (special.tone === 'good' ? 'special-good' : 'special-bad') : ''} ${isTarget ? 'cell-target' : ''} ${isFlash ? 'cell-flash' : ''}`}
+                className={`relative min-h-0 min-w-0 ${dark ? 'cell-dark' : 'cell-light'} ${special ? (special.tone === 'good' ? 'special-good' : 'special-bad') : ''} ${isTarget ? 'cell-target' : ''} ${isFlash ? 'cell-flash' : ''} ${onPath ? 'cell-path' : ''} ${isPreviewDest ? 'cell-preview-dest' : ''}`}
                 title={special?.title}
               >
                 {home && !isCorner && <div className="absolute inset-[20%] rounded-full opacity-75" style={{ border: `3px dashed ${home}` }} aria-hidden />}
@@ -132,6 +141,11 @@ export function Board({ state, overrides, theme, selectableActions, onPieceClick
                     data-testid={`piece-${piece.pieceId}`}
                     disabled={!isSel}
                     onClick={() => isSel && onPieceClick(piece.pieceId)}
+                    onMouseEnter={() => isSel && onPieceHover(piece.pieceId)}
+                    onMouseLeave={() => isSel && onPieceHover(null)}
+                    onFocus={() => isSel && onPieceHover(piece.pieceId)}
+                    onBlur={() => isSel && onPieceHover(null)}
+                    onTouchStart={() => isSel && onPieceHover(piece.pieceId)}
                     className={`piece absolute inset-[6%] flex items-center justify-center ${isSel ? 'piece-selectable' : 'cursor-default'} ${piece.moving ? 'piece-hop' : captureCell === cell ? 'piece-captured' : 'piece-enter'}`}
                     aria-label={`Фигура ${piece.index} на ${cell}${piece.lapDone ? ', круг пройден' : ''}`}
                     title={piece.lapDone ? (piece.onFinish ? 'На финишной диагонали' : 'Полный круг пройден: может идти на диагональ') : undefined}
@@ -150,6 +164,11 @@ export function Board({ state, overrides, theme, selectableActions, onPieceClick
           {FILES.map((f) => <Label key={`b${f}`} text={f} />)}
           <Corner />
         </div>
+        {previewLine && (
+          <svg className="arrow-overlay p-1.5 sm:p-2.5" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden data-testid="preview-path">
+            <path d={previewLine} className="preview-path" vectorEffect="non-scaling-stroke" />
+          </svg>
+        )}
         {dice.show && <DiceThrow value={dice.value} rolling={dice.rolling} />}
         {arrowPath && (
           <svg className="arrow-overlay p-1.5 sm:p-2.5" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden data-testid="arrow">

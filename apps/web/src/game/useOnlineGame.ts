@@ -1,4 +1,6 @@
-import type { Ack, ClientToServerEvents, Credentials, GameUpdate, JoinResult, RoomSnapshot, SeatUpdate, ServerToClientEvents } from '@blokha/shared';
+import type { Ack, ClientToServerEvents, Credentials, GameUpdate, JoinResult, Reaction, ReactionEvent, RoomSnapshot, SeatUpdate, ServerToClientEvents } from '@blokha/shared';
+import type { BotLevel } from '@blokha/game-engine';
+import { sfx } from './sound';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { usePresenter } from './usePresenter';
@@ -39,8 +41,10 @@ export interface OnlineGame extends GameController {
   create: (nickname: string) => Promise<string | null>;
   join: (code: string, nickname: string) => Promise<string | null>;
   updateSeat: (u: SeatUpdate) => Promise<string | null>;
-  addBot: () => Promise<string | null>;
+  addBot: (level?: BotLevel) => Promise<string | null>;
   removeBot: (playerId: string) => Promise<string | null>;
+  setBotLevel: (playerId: string, level: BotLevel) => Promise<string | null>;
+  replaceWithBot: (playerId: string) => Promise<string | null>;
   start: () => Promise<string | null>;
   newGame: () => Promise<string | null>;
   leave: () => Promise<void>;
@@ -54,6 +58,8 @@ export function useOnlineGame(enabled: boolean): OnlineGame {
   const [credentials, setCredentials] = useState<Credentials | null>(() => loadCredentials());
   const [conn, setConn] = useState<ConnStatus>('connecting');
   const [error, setError] = useState<string | null>(null);
+  const [reactions, setReactions] = useState<{ id: number; playerId: string; emoji: string }[]>([]);
+  const reactionId = useRef(1);
   const socketRef = useRef<C | null>(null);
   const credsRef = useRef<Credentials | null>(credentials);
   const lastVersion = useRef(-1);
@@ -118,6 +124,12 @@ export function useOnlineGame(enabled: boolean): OnlineGame {
       setRoom(snap);
       if (snap.status === 'lobby' && stateRef.current) reset();
     });
+    s.on('room:reaction', (r: ReactionEvent) => {
+      const id = reactionId.current++;
+      setReactions((prev) => [...prev.slice(-6), { id, playerId: r.playerId, emoji: r.emoji }]);
+      sfx.reaction();
+      setTimeout(() => setReactions((prev) => prev.filter((x) => x.id !== id)), 2500);
+    });
     s.on('game:update', (u: GameUpdate) => {
       if (u.version <= lastVersion.current) return; // дубликат
       lastVersion.current = u.version;
@@ -144,7 +156,10 @@ export function useOnlineGame(enabled: boolean): OnlineGame {
   const create = useCallback(async (nickname: string) => applyJoin(await emit('room:create', { nickname })), [applyJoin, emit]);
   const join = useCallback(async (code: string, nickname: string) => applyJoin(await emit('room:join', { code, nickname })), [applyJoin, emit]);
   const updateSeat = useCallback((u: SeatUpdate) => wrap('room:updateSeat', u), [wrap]);
-  const addBot = useCallback(() => wrap('room:addBot', {}), [wrap]);
+  const addBot = useCallback((level: BotLevel = 'normal') => wrap('room:addBot', { level }), [wrap]);
+  const setBotLevel = useCallback((playerId: string, level: BotLevel) => wrap('room:setBotLevel', { playerId, level }), [wrap]);
+  const replaceWithBot = useCallback((playerId: string) => wrap('room:replaceWithBot', { playerId }), [wrap]);
+  const sendReaction = useCallback((emoji: string) => void emit('room:react', { emoji: emoji as Reaction }), [emit]);
   const removeBot = useCallback((playerId: string) => wrap('room:removeBot', { playerId }), [wrap]);
   const start = useCallback(() => wrap('room:start', {}), [wrap]);
   const newGame = useCallback(() => wrap('room:newGame', {}), [wrap]);
@@ -203,6 +218,10 @@ export function useOnlineGame(enabled: boolean): OnlineGame {
     updateSeat,
     addBot,
     removeBot,
+    setBotLevel,
+    replaceWithBot,
+    reactions,
+    sendReaction,
     start,
     newGame,
     leave,

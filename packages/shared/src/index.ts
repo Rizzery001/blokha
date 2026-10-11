@@ -2,7 +2,7 @@
  * Протокол клиент ↔ сервер для онлайн-комнат BLOKHA (Socket.IO).
  * Сервер авторитетен: кубик бросается только на сервере, клиент присылает лишь намерения.
  */
-import type { Corner, GameEvent, GameState } from '@blokha/game-engine';
+import type { BotLevel, Corner, GameEvent, GameState } from '@blokha/game-engine';
 
 export type RoomStatus = 'lobby' | 'playing' | 'finished';
 
@@ -15,6 +15,7 @@ export interface SeatView {
   connected: boolean;
   isHost: boolean;
   isBot: boolean;
+  botLevel: BotLevel | null;
 }
 
 export interface RoomSnapshot {
@@ -23,9 +24,20 @@ export interface RoomSnapshot {
   status: RoomStatus;
   seats: SeatView[];
   game: GameState | null;
-  /** количество бонусных событий не нужно; версия состояния дублируется для удобства */
   version: number;
   createdAt: number;
+  /** счёт серии партий в этой комнате: playerId → число побед */
+  series: Record<string, number>;
+  gamesPlayed: number;
+}
+
+export const REACTIONS = ['👍', '😂', '😱', '🔥', '😭', '🎲', '👏', '🤬'] as const;
+export type Reaction = (typeof REACTIONS)[number];
+
+export interface ReactionEvent {
+  playerId: string;
+  emoji: Reaction;
+  at: number;
 }
 
 export interface Credentials {
@@ -82,8 +94,12 @@ export interface ClientToServerEvents {
   'room:start': (payload: Record<string, never>, ack: (r: Ack) => void) => void;
   'room:newGame': (payload: Record<string, never>, ack: (r: Ack) => void) => void;
   'room:leave': (payload: Record<string, never>, ack: (r: Ack) => void) => void;
-  'room:addBot': (payload: Record<string, never>, ack: (r: Ack) => void) => void;
+  'room:addBot': (payload: { level?: BotLevel }, ack: (r: Ack) => void) => void;
   'room:removeBot': (payload: { playerId: string }, ack: (r: Ack) => void) => void;
+  'room:setBotLevel': (payload: { playerId: string; level: BotLevel }, ack: (r: Ack) => void) => void;
+  /** хозяин: отключившегося игрока доигрывает робот (во время партии) или место освобождается (в лобби) */
+  'room:replaceWithBot': (payload: { playerId: string }, ack: (r: Ack) => void) => void;
+  'room:react': (payload: { emoji: Reaction }, ack: (r: Ack) => void) => void;
   'game:roll': (payload: { expectedVersion: number }, ack: (r: Ack<GameUpdate>) => void) => void;
   'game:choose': (payload: { actionId: string; expectedVersion: number }, ack: (r: Ack<GameUpdate>) => void) => void;
 }
@@ -92,6 +108,7 @@ export interface ClientToServerEvents {
 export interface ServerToClientEvents {
   'room:state': (room: RoomSnapshot) => void;
   'game:update': (update: GameUpdate) => void;
+  'room:reaction': (reaction: ReactionEvent) => void;
 }
 
 export const ROOM_CODE_LENGTH = 6;

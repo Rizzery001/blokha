@@ -1,6 +1,7 @@
 import {
   applyCommand,
   chooseBotAction,
+  type BotLevel,
   createCryptoDiceRoller,
   currentPlayer,
   type DiceRoller,
@@ -13,6 +14,7 @@ export type { AnimOverrides, LogEntry } from './usePresenter';
 
 export interface LocalPlayerSetup extends PlayerSetup {
   isBot?: boolean;
+  botLevel?: BotLevel;
 }
 
 /** Единый интерфейс управления партией для экрана игры (локальная и онлайн). */
@@ -21,6 +23,9 @@ export interface GameController extends Presenter {
   myPlayerId: string | null;
   botIds: Set<string>;
   disconnectedIds?: Set<string>;
+  /** реакции игроков (онлайн) */
+  reactions?: { id: number; playerId: string; emoji: string }[];
+  sendReaction?: (emoji: string) => void;
   roll: () => void;
   choose: (actionId: string) => void;
   error: string | null;
@@ -37,12 +42,14 @@ export function useLocalGame(dice?: DiceRoller): LocalGame {
   const { stateRef, ingest, busy } = presenter;
   const diceRef = useRef<DiceRoller>(dice ?? createCryptoDiceRoller());
   const [botIds, setBotIds] = useState<Set<string>>(new Set());
+  const botLevels = useRef<Record<string, BotLevel>>({});
   const pending = useRef(false);
 
   const start = useCallback(
     (players: LocalPlayerSetup[]) => {
       setBotIds(new Set(players.filter((p) => p.isBot).map((p) => p.id)));
-      presenter.startFresh(players.map(({ isBot, ...p }) => p));
+      botLevels.current = Object.fromEntries(players.filter((p) => p.isBot).map((p) => [p.id, p.botLevel ?? 'normal']));
+      presenter.startFresh(players.map(({ isBot, botLevel, ...p }) => p));
     },
     [presenter],
   );
@@ -80,7 +87,7 @@ export function useLocalGame(dice?: DiceRoller): LocalGame {
       const s = stateRef.current;
       if (!s || s !== state) return;
       if (s.phase === 'awaitingRoll') roll();
-      else if (s.phase === 'awaitingAction') choose(chooseBotAction(s, cur.id).id);
+      else if (s.phase === 'awaitingAction') choose(chooseBotAction(s, cur.id, Math.random, botLevels.current[cur.id] ?? 'normal').id);
     }, BOT_DELAY_MS);
     return () => clearTimeout(t);
   }, [state, busy, botIds, roll, choose, stateRef]);

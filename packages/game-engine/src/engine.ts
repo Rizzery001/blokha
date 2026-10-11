@@ -19,7 +19,15 @@ import {
   type GameState,
   type LegalAction,
   type PlayerState,
+  type PlayerStats,
 } from './types';
+
+export function emptyStats(): PlayerStats {
+  return {
+    rolls: 0, sixes: 0, sixStreak: 0, bestSixStreak: 0, captures: 0, captured: 0, bonusCells: 0, penaltyCells: 0,
+    autoForward: 0, autoBackward: 0, burnedRolls: 0, skippedTurns: 0, spawned: 0, lapsCompleted: 0, piecesFinished: 0, stepsMoved: 0,
+  };
+}
 
 export interface PlayerSetup {
   id: string;
@@ -72,6 +80,7 @@ export function createGame(options: CreateGameOptions): CommandResult {
 
   const state: GameState = {
     config,
+    stats: Object.fromEntries(players.map((p) => [p.id, emptyStats()])),
     players: playerStates,
     turnOrder: players.map((p) => p.id),
     currentPlayerIndex: 0,
@@ -138,6 +147,13 @@ export function resolveDiceRoll(state: GameState, events: GameEvent[], value: nu
 
   const sixBonusGranted = value === state.config.rules.spawnDieValue && state.config.rules.extraRollForEverySix > 0;
   if (sixBonusGranted) player.bonusRollsRemaining += state.config.rules.extraRollForEverySix;
+  const st = statsOf(state, player.id);
+  st.rolls += 1;
+  if (value === state.config.rules.spawnDieValue) {
+    st.sixes += 1;
+    st.sixStreak += 1;
+    st.bestSixStreak = Math.max(st.bestSixStreak, st.sixStreak);
+  } else st.sixStreak = 0;
 
   events.push({
     type: 'rolled',
@@ -152,6 +168,7 @@ export function resolveDiceRoll(state: GameState, events: GameEvent[], value: nu
   state.currentRoll = value;
   state.blockedPieces = blocked;
   if (actions.length === 0) {
+    st.burnedRolls += 1;
     events.push({
       type: 'rollBurned',
       playerId: player.id,
@@ -186,6 +203,8 @@ function capturePiece(state: GameState, events: GameEvent[], victimPlayerId: str
   if (!victim) throw new Error(`Victim piece ${victimPieceId} not found`);
   victim.progress = null;
   refreshPieceStatus(state.config, victimPlayer, victim);
+  statsOf(state, victimPlayerId).captured += 1;
+  statsOf(state, by.playerId).captures += 1;
   events.push({
     type: 'captured',
     victimPieceId,
@@ -206,12 +225,20 @@ export function applyPieceMove(state: GameState, events: GameEvent[], player: Pl
   if (action.type === 'spawn') {
     piece.progress = 0;
     refreshPieceStatus(state.config, player, piece);
+    statsOf(state, player.id).spawned += 1;
     events.push({ type: 'spawned', playerId: player.id, pieceId: piece.id, cell: action.to });
     // Спецклетки активируются только при обычном перемещении; угол не является спецклеткой.
     return;
   }
   piece.progress = action.toProgress;
   refreshPieceStatus(state.config, player, piece);
+  {
+    const st = statsOf(state, player.id);
+    st.stepsMoved += action.path.length;
+    const lap = lapLength(state.config);
+    if (action.fromProgress < lap && action.toProgress >= lap) st.lapsCompleted += 1;
+    if (action.toProgress === maxProgressFor(state, player)) st.piecesFinished += 1;
+  }
   events.push({ type: 'moved', playerId: player.id, pieceId: piece.id, from: action.from, to: action.to, path: action.path, kind: 'normal' });
   resolveSpecialCell(state, events, player, piece.id, action.to);
 }
@@ -223,6 +250,8 @@ export function resolveSpecialCell(state: GameState, events: GameEvent[], player
   const piece = player.pieces.find((p) => p.id === pieceId)!;
   if (special.type === 'turnBalance') {
     applyTurnBalance(player, special.rolls);
+    if (special.rolls > 0) statsOf(state, player.id).bonusCells += 1;
+    else statsOf(state, player.id).penaltyCells += 1;
     events.push({
       type: 'turnBalance',
       playerId: player.id,
@@ -245,6 +274,8 @@ export function resolveSpecialCell(state: GameState, events: GameEvent[], player
     }
     piece.progress = ev.toProgress;
     refreshPieceStatus(state.config, player, piece);
+    if (special.steps > 0) statsOf(state, player.id).autoForward += 1;
+    else statsOf(state, player.id).autoBackward += 1;
     events.push({
       type: 'moved',
       playerId: player.id,
@@ -299,6 +330,7 @@ export function advanceTurn(state: GameState, events: GameEvent[]): void {
     const next = currentPlayer(state);
     if (next.skippedTurnsRemaining > 0) {
       next.skippedTurnsRemaining -= 1;
+      statsOf(state, next.id).skippedTurns += 1;
       events.push({ type: 'turnSkipped', playerId: next.id, remainingSkips: next.skippedTurnsRemaining });
       continue;
     }
@@ -311,6 +343,15 @@ export function advanceTurn(state: GameState, events: GameEvent[]): void {
     return;
   }
   throw new Error('advanceTurn: unable to find next player');
+}
+
+function statsOf(state: GameState, playerId: string): PlayerStats {
+  if (!state.stats) state.stats = {};
+  return (state.stats[playerId] ??= emptyStats());
+}
+
+function maxProgressFor(state: GameState, player: PlayerState): number {
+  return lapLength(state.config) + state.config.homes[player.corner]!.length - 1;
 }
 
 /** Удобный помощник для UI: клетка каждой фигуры на доске. */

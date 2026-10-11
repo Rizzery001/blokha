@@ -107,3 +107,45 @@ describe('RoomService', () => {
     expect(room.seats).toHaveLength(2);
   });
 });
+
+describe('RoomService: серия, уровни робота, замена роботом', () => {
+  it('победа увеличивает счёт серии; новая партия сохраняет счёт', () => {
+    let seed = 11;
+    const random = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    const service = new RoomService({ store: new InMemoryRoomStore(), dice: () => Math.floor(random() * 6) + 1, random });
+    const host = service.create('Я');
+    service.addBot(host.creds, 'hard');
+    service.start(host.creds);
+    const code = host.room.code;
+    let n = 0;
+    while (service.getRoom(code).status === 'playing' && n++ < 100000) {
+      const room = service.getRoom(code);
+      if (service.isBotTurn(room)) service.botStep(code);
+      else if (room.game!.phase === 'awaitingRoll') service.roll(host.creds, room.version);
+      else service.choose(host.creds, room.game!.legalActions[0]!.id, room.version);
+    }
+    const snap = service.snapshot(service.getRoom(code));
+    expect(snap.gamesPlayed).toBe(1);
+    expect(Object.values(snap.series).reduce((a, b) => a + b, 0)).toBe(1);
+    expect(snap.seats[1]!.botLevel).toBe('hard');
+    service.newGame(host.creds);
+    expect(service.snapshot(service.getRoom(code)).gamesPlayed).toBe(1);
+  });
+
+  it('отключившегося игрока можно заменить роботом только во время партии и только хозяину', () => {
+    const { service, host, guest, code } = setup();
+    expect(() => service.replaceWithBot(host.creds, guest.creds.playerId)).toThrow(/на связи/);
+    service.start(host.creds);
+    service.setConnected(guest.creds, false);
+    expect(() => service.replaceWithBot(guest.creds, host.creds.playerId)).toThrow(/хозяин/);
+    const room = service.replaceWithBot(host.creds, guest.creds.playerId);
+    const seat = room.seats.find((s) => s.playerId === guest.creds.playerId)!;
+    expect(seat.isBot).toBe(true);
+    // старый токен больше не действует
+    expect(() => service.resume(guest.creds)).toThrow(/токен/);
+    expect(service.getRoom(code).game!.players[1]!.nickname).toContain('🤖');
+  });
+});

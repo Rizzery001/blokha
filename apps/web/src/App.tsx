@@ -32,6 +32,15 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
   const [screen, setScreen] = useState<Screen>(() => (urlRoom || loadCredentials() ? 'online' : 'home'));
   const [theme, setTheme] = useState<Theme>(loadTheme);
   const game = useLocalGame(dice);
+  const [localSeries, setLocalSeries] = useState<{ wins: Record<string, number>; games: number; counted: number }>({ wins: {}, games: 0, counted: -1 });
+  useEffect(() => {
+    const st = game.state;
+    if (!st || st.phase !== 'finished' || !st.winnerId) return;
+    setLocalSeries((prev) => {
+      if (prev.counted === st.version) return prev;
+      return { wins: { ...prev.wins, [st.winnerId!]: (prev.wins[st.winnerId!] ?? 0) + 1 }, games: prev.games + 1, counted: st.version };
+    });
+  }, [game.state]);
   const online = useOnlineGame(screen === 'online');
   const toggleTheme = () => setTheme((t) => (t === 'wood' ? 'modern' : 'wood'));
   useEffect(() => {
@@ -55,6 +64,19 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
           </div>
         ) : null;
       const isHost = room.hostId === online.myPlayerId;
+      const bannerWithActions =
+        banner && offline.length > 0 && online.conn === 'connected' && isHost ? (
+          <div className="w-full max-w-[min(94vw,640px)] rounded-lg bg-amber-900/60 text-amber-100 text-sm px-3 py-2 flex flex-wrap items-center gap-2">
+            <span>Ждём игрока: {offline.map((s) => s.nickname).join(', ')}.</span>
+            {offline.map((s) => (
+              <button key={s.playerId} type="button" onClick={() => online.replaceWithBot(s.playerId)} className="px-2 py-1 rounded-md bg-sky-600 text-white text-xs font-bold">
+                🤖 Доиграть роботом за {s.nickname}
+              </button>
+            ))}
+          </div>
+        ) : (
+          banner
+        );
       return (
         <GameScreen
           game={online}
@@ -62,7 +84,9 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
           onToggleTheme={toggleTheme}
           newGameLabel={isHost ? '← В лобби' : '← Покинуть'}
           canStartNew={isHost}
-          banner={banner}
+          series={room.series}
+          gamesPlayed={room.gamesPlayed}
+          banner={bannerWithActions}
           onNewGame={() => {
             if (isHost) void online.newGame();
             else {
@@ -95,6 +119,8 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
         game={game}
         theme={theme}
         onToggleTheme={toggleTheme}
+        series={localSeries.wins}
+        gamesPlayed={localSeries.games}
         onNewGame={() => {
           game.reset();
           setScreen('setup');

@@ -1,5 +1,4 @@
-import type { GameState } from '@blokha/game-engine';
-import type { Corner } from '@blokha/game-engine';
+import type { BotLevel, Corner, GameState } from '@blokha/game-engine';
 import type { RoomStatus } from '@blokha/shared';
 
 export interface Seat {
@@ -11,6 +10,7 @@ export interface Seat {
   color: string;
   connected: boolean;
   isBot: boolean;
+  botLevel: BotLevel;
 }
 
 export interface Room {
@@ -22,6 +22,8 @@ export interface Room {
   version: number;
   createdAt: number;
   updatedAt: number;
+  series: Record<string, number>;
+  gamesPlayed: number;
 }
 
 /**

@@ -113,8 +113,30 @@ export interface BlockedPieceReason {
   cell?: Cell;
 }
 
+/** Статистика игрока за партию (для таблицы результатов и достижений). Ведётся движком детерминированно. */
+export interface PlayerStats {
+  rolls: number;
+  sixes: number;
+  /** текущая серия шестёрок подряд и лучшая серия */
+  sixStreak: number;
+  bestSixStreak: number;
+  captures: number;
+  captured: number;
+  bonusCells: number;
+  penaltyCells: number;
+  autoForward: number;
+  autoBackward: number;
+  burnedRolls: number;
+  skippedTurns: number;
+  spawned: number;
+  lapsCompleted: number;
+  piecesFinished: number;
+  stepsMoved: number;
+}
+
 export interface GameState {
   config: BoardConfig;
+  stats: Record<string, PlayerStats>;
   players: PlayerState[];
   /** порядок ходов — по порядку в лобби */
   turnOrder: string[];
