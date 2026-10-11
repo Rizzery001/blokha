@@ -71,5 +71,16 @@ await dp.waitForTimeout(200);
 await dp.screenshot({ path: 'e2e/shots/game-desktop-wood.png' });
 await dp.getByTestId('toggle-theme').click();
 await dp.screenshot({ path: 'e2e/shots/game-desktop-modern.png' });
+
+// бросок кубика с реальными таймингами анимации (без ?fast): кадр в середине кувыркания
+const anim = await desk.newPage();
+await anim.goto(`${base}/`);
+await anim.getByTestId('play-local').click();
+await anim.getByTestId('start-game').click();
+await anim.getByTestId('roll').click();
+await anim.waitForTimeout(600);
+await anim.screenshot({ path: 'e2e/shots/dice-throw-desktop.png' });
+await anim.waitForTimeout(700);
+await anim.screenshot({ path: 'e2e/shots/dice-landed-desktop.png' });
 await browser.close();
 if (!victory || errors.length) { console.error('E2E FAILED'); process.exit(1); }

@@ -12,8 +12,9 @@ export type AnimOverrides = Record<string, Cell>;
 
 /** Ускоренный режим для e2e-тестов: ?fast в адресе. Правила не меняются, только задержки анимации. */
 export const FAST = typeof location !== 'undefined' && /[?&]fast/.test(location.search);
-const STEP_MS = FAST ? 4 : 140;
-export const DICE_SPIN_MS = FAST ? 10 : 650;
+export const STEP_MS = FAST ? 4 : 190;
+export const DICE_SPIN_MS = FAST ? 10 : 1100;
+export const DICE_SETTLE_MS = FAST ? 0 : 650;
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -41,7 +42,15 @@ export function describeEvent(state: GameState, e: GameEvent): LogEntry | null {
     case 'moved':
       if (e.kind === 'autoForward') return { id: 0, text: `Бонус клетки ${e.from}: вперёд на ${e.to}`, tone: 'good' };
       if (e.kind === 'autoBackward') return { id: 0, text: `Штраф клетки ${e.from}: назад на ${e.to}`, tone: 'bad' };
-      return { id: 0, text: `${name(e.playerId)}: ${e.from} → ${e.to}`, tone: 'info' };
+      {
+        const owner = state.players.find((p) => p.id === e.playerId);
+        const piece = owner?.pieces.find((p) => p.id === e.pieceId);
+        const lap = state.config.perimeter.length;
+        const idx = owner ? owner.pieces.findIndex((p) => p.id === e.pieceId) + 1 : 0;
+        if (piece && piece.progress === lap) return { id: 0, text: `${name(e.playerId)}: фигура ${idx} ${e.from} → ${e.to}, полный круг пройден ✓`, tone: 'good' };
+        if (piece && piece.progress !== null && piece.progress > lap) return { id: 0, text: `${name(e.playerId)}: фигура ${idx} ${e.from} → ${e.to} (финишная диагональ)`, tone: 'good' };
+        return { id: 0, text: `${name(e.playerId)}: фигура ${idx} ${e.from} → ${e.to}`, tone: 'info' };
+      }
     case 'captured':
       return { id: 0, text: `${name(e.byPlayerId)} выбил фигуру ${name(e.victimPlayerId)} на ${e.cell}`, tone: 'good' };
     case 'autoMoveCancelled':
@@ -60,6 +69,19 @@ export function describeEvent(state: GameState, e: GameEvent): LogEntry | null {
   }
 }
 
+export interface Notice {
+  id: number;
+  text: string;
+  tone: 'good' | 'bad' | 'info';
+}
+
+/** Стрелка авто-перемещения, показываемая поверх доски во время анимации. */
+export interface ArrowOverlay {
+  from: Cell;
+  to: Cell;
+  kind: 'autoForward' | 'autoBackward';
+}
+
 /** Общее для локальной и онлайн-игры: состояние, журнал, анимации. Расчёт движения — в движке/на сервере. */
 export interface Presenter {
   state: GameState | null;
@@ -69,6 +91,10 @@ export interface Presenter {
   lastRoll: number | null;
   rolling: boolean;
   flashCell: Cell | null;
+  notices: Notice[];
+  arrow: ArrowOverlay | null;
+  /** клетка, на которой только что произошло выбивание (для эффекта) */
+  captureCell: Cell | null;
   /** принять новое состояние с событиями: анимировать и опубликовать */
   ingest: (next: GameState, events: GameEvent[]) => Promise<void>;
   /** мгновенно показать состояние без анимации (восстановление) */
@@ -89,7 +115,16 @@ export function usePresenter(): Presenter {
   const [lastRoll, setLastRoll] = useState<number | null>(null);
   const [rolling, setRolling] = useState(false);
   const [flashCell, setFlashCell] = useState<Cell | null>(null);
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [arrow, setArrow] = useState<ArrowOverlay | null>(null);
+  const [captureCell, setCaptureCell] = useState<Cell | null>(null);
   const logId = useRef(1);
+  const noticeId = useRef(1);
+  const notify = useCallback((text: string, tone: Notice['tone']) => {
+    const id = noticeId.current++;
+    setNotices((prev) => [...prev.slice(-3), { id, text, tone }]);
+    setTimeout(() => setNotices((prev) => prev.filter((n) => n.id !== id)), FAST ? 50 : 2600);
+  }, []);
   const stateRef = useRef<GameState | null>(null);
   const mounted = useRef(true);
   const queue = useRef<Promise<void>>(Promise.resolve());
@@ -119,16 +154,36 @@ export function usePresenter(): Presenter {
     const ov: AnimOverrides = {};
     for (const e of events) {
       if (!mounted.current) return;
+      const name = (id: string) => next.players.find((p) => p.id === id)?.nickname ?? id;
       if (e.type === 'rolled') {
         setRolling(true);
         await sleep(DICE_SPIN_MS);
-        setRolling(false);
         setLastRoll(e.value);
+        setRolling(false);
+        if (e.sixBonusGranted) notify('Шестёрка! +1 бросок', 'good');
+        await sleep(DICE_SETTLE_MS);
       } else if (e.type === 'moved') {
+        if (e.kind !== 'normal') {
+          setArrow({ from: e.from, to: e.to, kind: e.kind });
+          notify(e.kind === 'autoForward' ? `${e.from}: ${e.path.length} вперёд!` : `${e.from}: ${e.path.length} назад`, e.kind === 'autoForward' ? 'good' : 'bad');
+          await sleep(FAST ? 0 : 350);
+        }
         for (const cell of e.path) {
           ov[e.pieceId] = cell;
           setOverrides({ ...ov });
           await sleep(STEP_MS);
+        }
+        if (e.kind === 'normal') {
+          const owner = next.players.find((p) => p.id === e.playerId);
+          const piece = owner?.pieces.find((p) => p.id === e.pieceId);
+          const lap = next.config.perimeter.length;
+          if (owner && piece && piece.progress === lap) {
+            notify(`${owner.nickname}: фигура прошла полный круг — теперь может идти на диагональ`, 'good');
+          }
+        }
+        if (e.kind !== 'normal') {
+          await sleep(FAST ? 0 : 250);
+          setArrow(null);
         }
       } else if (e.type === 'spawned') {
         ov[e.pieceId] = e.cell;
@@ -136,21 +191,35 @@ export function usePresenter(): Presenter {
         await sleep(STEP_MS);
       } else if (e.type === 'captured') {
         setFlashCell(e.cell);
+        setCaptureCell(e.cell);
+        notify(`${name(e.byPlayerId)} выбил фигуру: ${name(e.victimPlayerId)} → в резерв`, 'good');
+        await sleep(STEP_MS * 2);
         ov[e.victimPieceId] = '__reserve' as Cell;
         setOverrides({ ...ov });
         await sleep(STEP_MS * 3);
         setFlashCell(null);
+        setCaptureCell(null);
       } else if (e.type === 'autoMoveCancelled') {
         setFlashCell(e.cell);
-        await sleep(STEP_MS * 2);
+        notify(`${e.cell}: путь занят, бонус отменён`, 'bad');
+        await sleep(STEP_MS * 3);
         setFlashCell(null);
+      } else if (e.type === 'rollBurned') {
+        notify(`Ходов нет: бросок ${e.value} сгорел`, 'bad');
+        await sleep(FAST ? 0 : 500);
+      } else if (e.type === 'turnBalance') {
+        notify(e.rolls > 0 ? `${e.cell}: +${e.rolls} доп. ${e.rolls === 1 ? 'бросок' : 'броска'}` : `${e.cell}: пропуск ${-e.rolls} → бонусов ${e.bonusRollsRemaining}, пропусков ${e.skippedTurnsRemaining}`, e.rolls > 0 ? 'good' : 'bad');
+        await sleep(FAST ? 0 : 500);
+      } else if (e.type === 'turnSkipped') {
+        notify(`${name(e.playerId)} пропускает очередь`, 'bad');
+        await sleep(FAST ? 0 : 500);
       }
     }
     setOverrides({});
     commit(next);
     pushLog(next, events);
     setAnimating(false);
-  }, [commit, pushLog]);
+  }, [commit, pushLog, notify]);
 
   /** Обновления ставятся в очередь, чтобы быстрые ходы роботов/сервера не перемешивали анимации. */
   const ingest = useCallback(
@@ -192,5 +261,5 @@ export function usePresenter(): Presenter {
     setRolling(false);
   }, [commit]);
 
-  return { state, log, animating, overrides, lastRoll, rolling, flashCell, ingest, setImmediate, startFresh, reset, stateRef, setRolling, busy: animating || rolling };
+  return { state, log, animating, overrides, lastRoll, rolling, flashCell, notices, arrow, captureCell, ingest, setImmediate, startFresh, reset, stateRef, setRolling, busy: animating || rolling };
 }

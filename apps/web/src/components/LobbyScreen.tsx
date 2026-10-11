@@ -52,7 +52,7 @@ export function LobbyScreen({ online, onLeave }: { online: OnlineGame; onLeave: 
           return (
             <div key={seat.playerId} data-testid={`seat-${i}`} className={`rounded-xl p-3 bg-stone-800/70 border-2 ${mine ? 'border-yellow-400' : 'border-stone-700'}`}>
               <div className="flex items-center gap-2">
-                <PieceGlyph color={seat.color} glyph={PIECE_SETS.find((p) => p.id === seat.pieceSet)?.glyph ?? '●'} index={i + 1} size="small" />
+                <span className="w-10 h-10 inline-block"><PieceGlyph color={seat.color} glyph={seat.pieceSet} index={i + 1} size="small" /></span>
                 <span className="font-black truncate">{seat.isBot ? '🤖 ' : ''}{seat.nickname}{mine ? ' (вы)' : ''}</span>
                 {seat.isHost && <span className="text-[10px] uppercase tracking-wide bg-yellow-400/20 text-yellow-300 px-1.5 rounded">хозяин</span>}
                 {!seat.connected && !seat.isBot && <span className="text-[10px] uppercase tracking-wide bg-rose-900/50 text-rose-300 px-1.5 rounded">офлайн</span>}
@@ -79,11 +79,13 @@ export function LobbyScreen({ online, onLeave }: { online: OnlineGame; onLeave: 
                       );
                     })}
                   </div>
-                  <select value={me.pieceSet} onChange={(e) => online.updateSeat({ pieceSet: e.target.value })} className="bg-stone-900 rounded-md px-2 py-1.5 text-sm" aria-label="Набор фигур">
+                  <div className="flex gap-0.5" role="radiogroup" aria-label="Набор фигур">
                     {PIECE_SETS.map((s) => (
-                      <option key={s.id} value={s.id}>{s.glyph} {s.name}</option>
+                      <button key={s.id} type="button" role="radio" aria-checked={me.pieceSet === s.id} title={s.name} onClick={() => online.updateSeat({ pieceSet: s.id })} className={`w-8 h-8 rounded-md text-xl leading-none ${me.pieceSet === s.id ? 'bg-yellow-400 text-stone-900' : 'bg-stone-700 text-stone-200'}`}>
+                        {s.glyph}
+                      </button>
                     ))}
-                  </select>
+                  </div>
                   <div className="flex gap-1">
                     {PLAYER_COLORS.map((c) => (
                       <button key={c.id} type="button" aria-label={c.name} onClick={() => online.updateSeat({ color: c.id })} className={`w-6 h-6 rounded-full ${me.color === c.id ? 'ring-2 ring-white' : ''}`} style={{ background: c.id }} />

@@ -70,7 +70,8 @@ await b.getByTestId('victory').waitFor({ timeout: 10000 }).catch(() => {});
 const victoryB = await b.getByTestId('victory').isVisible();
 const statusA = await a.getByTestId('status').innerText();
 const statusB = await b.getByTestId('status').innerText();
-// оба клиента видят одинаковые броски: сравниваем последние записи журнала
+// оба клиента видят одинаковые броски: сравниваем последние записи журнала (на мобильном журнал свёрнут)
+await b.evaluate(() => document.querySelector('[data-testid="log-toggle"]')?.click());
 const logA = (await a.getByTestId('log').innerText()).split('\n').filter((l) => l.includes('выбросил')).slice(-20);
 const logB = (await b.getByTestId('log').innerText()).split('\n').filter((l) => l.includes('выбросил')).slice(-20);
 await a.screenshot({ path: 'e2e/shots/online-victory-desktop.png' });

@@ -54,7 +54,7 @@ export function SetupScreen({ onStart, onBack }: { onStart: (players: LocalPlaye
       <div className="mt-4 space-y-3">
         {active.map((row, i) => (
           <div key={i} className="rounded-xl bg-stone-800/70 p-3 grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_auto_auto] gap-2 items-center">
-            <PieceGlyph color={row.color} glyph={PIECE_SETS.find((s) => s.id === row.pieceSet)!.glyph} index={i + 1} size="small" />
+            <span className="w-10 h-10 inline-block"><PieceGlyph color={row.color} glyph={row.pieceSet} index={i + 1} size="small" /></span>
             <div className="flex items-center gap-2 min-w-0">
             <input
               data-testid={`nick-${i}`}
@@ -90,16 +90,21 @@ export function SetupScreen({ onStart, onBack }: { onStart: (players: LocalPlaye
               })}
             </div>
             <div className="flex gap-1 col-span-2 sm:col-span-1 flex-wrap">
-              <select
-                value={row.pieceSet}
-                onChange={(e) => update(i, { pieceSet: e.target.value })}
-                className="bg-stone-900 rounded-md px-2 py-1.5 text-sm"
-                aria-label="Набор фигур"
-              >
+              <div className="flex gap-0.5" role="radiogroup" aria-label="Набор фигур">
                 {PIECE_SETS.map((s) => (
-                  <option key={s.id} value={s.id}>{s.glyph} {s.name}</option>
+                  <button
+                    key={s.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={row.pieceSet === s.id}
+                    title={s.name}
+                    onClick={() => update(i, { pieceSet: s.id })}
+                    className={`w-8 h-8 rounded-md text-xl leading-none ${row.pieceSet === s.id ? 'bg-yellow-400 text-stone-900' : 'bg-stone-700 text-stone-200'}`}
+                  >
+                    {s.glyph}
+                  </button>
                 ))}
-              </select>
+              </div>
               <div className="flex gap-1">
                 {PLAYER_COLORS.map((c) => (
                   <button

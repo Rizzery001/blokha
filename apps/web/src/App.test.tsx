@@ -18,12 +18,12 @@ describe('локальная игра в браузере (jsdom)', () => {
 
     fireEvent.click(screen.getByTestId('roll'));
     // ждём анимацию кубика (650 мс) и обновление
-    await act(() => new Promise((r) => setTimeout(r, 900)));
+    await act(() => new Promise((r) => setTimeout(r, 2200)));
     expect(screen.getByTestId('status').textContent).toContain('выпало 6');
     const reserve = screen.getByTestId('reserve-p1-1') as HTMLButtonElement;
     expect(reserve.disabled).toBe(false);
     fireEvent.click(reserve);
-    await act(() => new Promise((r) => setTimeout(r, 400)));
+    await act(() => new Promise((r) => setTimeout(r, 600)));
     expect(screen.getByTestId('cell-A1').querySelector('[data-testid="piece-p1-1"]')).toBeTruthy();
     // бонусный бросок остаётся у Ани
     expect(screen.getByTestId('status').textContent).toContain('бонусный бросок');
