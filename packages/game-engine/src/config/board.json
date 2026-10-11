@@ -1,0 +1,46 @@
+{
+  "gameId": "blokha",
+  "version": "1.0",
+  "boardSize": 8,
+  "diceSides": 6,
+  "pieceCountPerPlayer": 4,
+  "playerCount": { "min": 2, "max": 4 },
+  "direction": "clockwise",
+  "perimeter": [
+    "A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8",
+    "B8", "C8", "D8", "E8", "F8", "G8", "H8",
+    "H7", "H6", "H5", "H4", "H3", "H2", "H1",
+    "G1", "F1", "E1", "D1", "C1", "B1"
+  ],
+  "homes": {
+    "A1": ["A1", "B2", "C3", "D4"],
+    "H1": ["H1", "G2", "F3", "E4"],
+    "H8": ["H8", "G7", "F6", "E5"],
+    "A8": ["A8", "B7", "C6", "D5"]
+  },
+  "specialCells": {
+    "A2": {"type": "autoMove", "steps": 5, "captureOnDestination": true, "intermediateCellsMustBeEmpty": true},
+    "H5": {"type": "autoMove", "steps": 3, "captureOnDestination": true, "intermediateCellsMustBeEmpty": true},
+    "H7": {"type": "autoMove", "steps": -5, "captureOnDestination": false, "intermediateCellsMustBeEmpty": true},
+    "D1": {"type": "turnBalance", "rolls": -1},
+    "C8": {"type": "turnBalance", "rolls": -3},
+    "E8": {"type": "turnBalance", "rolls": 1},
+    "F1": {"type": "turnBalance", "rolls": 3}
+  },
+  "rules": {
+    "spawnDieValue": 6,
+    "extraRollForEverySix": 1,
+    "multipleSixesAllowed": true,
+    "singleOccupancy": true,
+    "intermediateCellsBlockAllMoves": true,
+    "normalMoveCapturesOnDestination": true,
+    "spawnCapturesOpponent": true,
+    "backwardsAutoMoveCaptures": false,
+    "specialCellsTriggerOnlyOnNormalMoveLanding": true,
+    "specialCellsTriggerWhenPassedThrough": false,
+    "exactFinishRollRequired": true,
+    "cornerFinishSquareIsCapturable": true,
+    "blockedRollIsSpent": true,
+    "penaltiesOffsetUnusedBonusRolls": true
+  }
+}

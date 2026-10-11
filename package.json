@@ -1,0 +1,15 @@
+{
+  "name": "blokha",
+  "private": true,
+  "version": "0.1.0",
+  "description": "BLOKHA — браузерная версия семейной настольной игры «Блоха»",
+  "packageManager": "pnpm@10.28.0",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev": "pnpm --filter @blokha/web dev",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r typecheck"
+  }
+}
