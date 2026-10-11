@@ -3,6 +3,9 @@
 import { chromium } from 'playwright';
 
 const base = process.argv[2] ?? 'http://localhost:5173';
+const SEL = '[data-testid^="reserve-"]:enabled, [data-testid^="piece-"]:enabled';
+/** Синхронный клик по случайной доступной фигуре внутри страницы: без гонок с перерисовкой. */
+const clickPiece = (page) => page.evaluate((sel) => { const els = [...document.querySelectorAll(sel)]; if (!els.length) return false; els[Math.floor(Math.random() * els.length)].click(); return true; }, SEL);
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
 const page = await ctx.newPage();
@@ -13,6 +16,9 @@ page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 await page.goto(`${base}/?fast`);
 await page.getByTestId('play-local').click();
 await page.getByTestId('count-3').click();
+// все три места — люди (hot seat)
+await page.getByTestId('bot-1').click();
+await page.getByTestId('bot-2').click();
 await page.getByTestId('nick-0').fill('Мама');
 await page.getByTestId('nick-1').fill('Папа');
 await page.getByTestId('nick-2').fill('Дима');
@@ -32,21 +38,11 @@ while (steps < 6000) {
     steps++;
     continue;
   }
-  // выбираем любую подсвеченную фигуру: сначала резерв, потом на доске
-  const reserve = page.locator('[data-testid^="reserve-"]:enabled');
-  const onBoard = page.locator('[data-testid^="piece-"]:enabled');
-  const choices = [];
-  for (const loc of [reserve, onBoard]) {
-    const n = await loc.count();
-    for (let i = 0; i < n; i++) choices.push(loc.nth(i));
+  if (!shotTaken && steps > 40 && (await page.locator(SEL).count()) > 0) {
+    await page.screenshot({ path: 'e2e/shots/game-mid-mobile.png' });
+    shotTaken = true;
   }
-  if (choices.length > 0) {
-    if (!shotTaken && steps > 40) {
-      await page.screenshot({ path: 'e2e/shots/game-mid-mobile.png' });
-      shotTaken = true;
-    }
-    const pick = choices[Math.floor(Math.random() * choices.length)];
-    await pick.click({ force: true });
+  if (await clickPiece(page)) {
     steps++;
     continue;
   }
@@ -68,8 +64,7 @@ await dp.getByTestId('count-4').click();
 await dp.getByTestId('start-game').click();
 for (let i = 0; i < 60; i++) {
   if (await dp.getByTestId('roll').isEnabled().catch(() => false)) { await dp.getByTestId('roll').click(); continue; }
-  const c = dp.locator('[data-testid^="reserve-"]:enabled, [data-testid^="piece-"]:enabled');
-  if (await c.count()) { await c.first().click({ force: true }); continue; }
+  if (await clickPiece(dp)) continue;
   await dp.waitForTimeout(15);
 }
 await dp.waitForTimeout(200);

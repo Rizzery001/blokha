@@ -8,12 +8,15 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "pnpm --filter @blokha/web dev",
+    "dev": "pnpm -r --parallel --filter @blokha/web --filter @blokha/server dev",
+    "dev:web": "pnpm --filter @blokha/web dev",
+    "dev:server": "pnpm --filter @blokha/server dev",
+    "start": "pnpm --filter @blokha/server start",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r typecheck",
-    "e2e": "node e2e/local-game.mjs"
+    "e2e": "node e2e/local-game.mjs && node e2e/bot-game.mjs && node e2e/online-room.mjs"
   },
   "devDependencies": {
     "playwright": "1.56.1"

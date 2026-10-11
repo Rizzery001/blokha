@@ -1,4 +1,5 @@
-import { CORNERS, type Corner, type PlayerSetup } from '@blokha/game-engine';
+import { CORNERS, type Corner } from '@blokha/game-engine';
+import type { LocalPlayerSetup } from '../game/useLocalGame';
 import { useState } from 'react';
 import { PIECE_SETS, PLAYER_COLORS } from '../game/pieceSets';
 import { PieceGlyph } from './Board';
@@ -8,20 +9,21 @@ interface Row {
   corner: Corner;
   pieceSet: string;
   color: string;
+  isBot: boolean;
 }
 
 const DEFAULT_ROWS: Row[] = [
-  { nickname: 'Игрок 1', corner: 'A1', pieceSet: 'pawn', color: PLAYER_COLORS[0]!.id },
-  { nickname: 'Игрок 2', corner: 'H8', pieceSet: 'knight', color: PLAYER_COLORS[1]!.id },
-  { nickname: 'Игрок 3', corner: 'H1', pieceSet: 'rook', color: PLAYER_COLORS[2]!.id },
-  { nickname: 'Игрок 4', corner: 'A8', pieceSet: 'bishop', color: PLAYER_COLORS[3]!.id },
+  { nickname: 'Игрок 1', corner: 'A1', pieceSet: 'pawn', color: PLAYER_COLORS[0]!.id, isBot: false },
+  { nickname: 'Робот Шура', corner: 'H8', pieceSet: 'knight', color: PLAYER_COLORS[1]!.id, isBot: true },
+  { nickname: 'Робот Кеша', corner: 'H1', pieceSet: 'rook', color: PLAYER_COLORS[2]!.id, isBot: true },
+  { nickname: 'Робот Фима', corner: 'A8', pieceSet: 'bishop', color: PLAYER_COLORS[3]!.id, isBot: true },
 ];
 
-export function buildPlayers(rows: Row[]): PlayerSetup[] {
-  return rows.map((r, i) => ({ id: `p${i + 1}`, nickname: r.nickname.trim() || `Игрок ${i + 1}`, corner: r.corner, pieceSet: r.pieceSet, color: r.color }));
+export function buildPlayers(rows: Row[]): LocalPlayerSetup[] {
+  return rows.map((r, i) => ({ id: `p${i + 1}`, nickname: r.nickname.trim() || `Игрок ${i + 1}`, corner: r.corner, pieceSet: r.pieceSet, color: r.color, isBot: r.isBot }));
 }
 
-export function SetupScreen({ onStart, onBack }: { onStart: (players: PlayerSetup[]) => void; onBack: () => void }) {
+export function SetupScreen({ onStart, onBack }: { onStart: (players: LocalPlayerSetup[]) => void; onBack: () => void }) {
   const [count, setCount] = useState(2);
   const [rows, setRows] = useState<Row[]>(DEFAULT_ROWS);
   const active = rows.slice(0, count);
@@ -32,7 +34,7 @@ export function SetupScreen({ onStart, onBack }: { onStart: (players: PlayerSetu
     <div className="max-w-2xl mx-auto p-4 sm:p-6">
       <button type="button" onClick={onBack} className="text-stone-400 hover:text-white text-sm">← Назад</button>
       <h2 className="text-2xl sm:text-3xl font-black mt-2">Локальная партия</h2>
-      <p className="text-stone-400 text-sm mt-1">Все игроки за одним устройством. Очередность — по порядку в списке.</p>
+      <p className="text-stone-400 text-sm mt-1">Все игроки за одним устройством. Любое место можно отдать роботу. Очередность — по порядку в списке.</p>
 
       <div className="mt-4 flex items-center gap-2">
         <span className="text-sm">Игроков:</span>
@@ -53,13 +55,24 @@ export function SetupScreen({ onStart, onBack }: { onStart: (players: PlayerSetu
         {active.map((row, i) => (
           <div key={i} className="rounded-xl bg-stone-800/70 p-3 grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_auto_auto] gap-2 items-center">
             <PieceGlyph color={row.color} glyph={PIECE_SETS.find((s) => s.id === row.pieceSet)!.glyph} index={i + 1} size="small" />
+            <div className="flex items-center gap-2 min-w-0">
             <input
               data-testid={`nick-${i}`}
               value={row.nickname}
               maxLength={20}
               onChange={(e) => update(i, { nickname: e.target.value })}
-              className="bg-stone-900 rounded-lg px-3 py-2 text-base font-bold outline-none focus:ring-2 ring-yellow-400 min-w-0"
+              className="bg-stone-900 rounded-lg px-3 py-2 text-base font-bold outline-none focus:ring-2 ring-yellow-400 min-w-0 flex-1"
             />
+            <button
+              type="button"
+              data-testid={`bot-${i}`}
+              onClick={() => update(i, { isBot: !row.isBot })}
+              className={`shrink-0 px-2.5 py-2 rounded-lg text-sm font-bold ${row.isBot ? 'bg-sky-500 text-white' : 'bg-stone-700 text-stone-300'}`}
+              title="Этим местом играет робот"
+            >
+              {row.isBot ? '🤖 Робот' : '🙂 Человек'}
+            </button>
+            </div>
             <div className="flex gap-1 col-span-2 sm:col-span-1">
               {CORNERS.map((c) => {
                 const taken = active.some((r, k) => k !== i && r.corner === c);

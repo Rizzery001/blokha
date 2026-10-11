@@ -1,6 +1,6 @@
 import { currentPlayer, type Cell } from '@blokha/game-engine';
-import { useEffect, useRef } from 'react';
-import type { LocalGame } from '../game/useLocalGame';
+import { useEffect, useRef, type ReactNode } from 'react';
+import type { GameController } from '../game/useLocalGame';
 import { Board } from './Board';
 import { Dice } from './Dice';
 import { PlayerPanel } from './PlayerPanel';
@@ -15,13 +15,19 @@ const BLOCK_TEXT: Record<string, string> = {
 };
 
 interface Props {
-  game: LocalGame;
+  game: GameController;
   theme: 'wood' | 'modern';
   onToggleTheme: () => void;
   onNewGame: () => void;
+  /** подпись кнопки выхода/новой партии */
+  newGameLabel?: string;
+  /** баннер над доской (онлайн: отключённые игроки, состояние соединения) */
+  banner?: ReactNode;
+  /** может ли этот пользователь начать новую партию (в онлайне — только хозяин) */
+  canStartNew?: boolean;
 }
 
-export function GameScreen({ game, theme, onToggleTheme, onNewGame }: Props) {
+export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel = '← Новая партия', banner, canStartNew = true }: Props) {
   const { state } = game;
   const logRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -31,8 +37,11 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame }: Props) {
 
   const cur = currentPlayer(state);
   const finished = state.phase === 'finished';
-  const canRoll = state.phase === 'awaitingRoll' && !game.animating && !game.rolling && !finished;
-  const choosing = state.phase === 'awaitingAction' && !game.animating;
+  const isBotTurn = game.botIds.has(cur.id);
+  const myTurn = !isBotTurn && (game.myPlayerId === null || game.myPlayerId === cur.id);
+  const canRoll = myTurn && state.phase === 'awaitingRoll' && !game.animating && !game.rolling && !finished;
+  const choosing = myTurn && state.phase === 'awaitingAction' && !game.animating;
+  const waitingOther = !myTurn && !finished && !game.animating;
   const spawnAction = choosing ? state.legalActions.find((a) => a.type === 'spawn') : undefined;
   const moveActions = choosing ? state.legalActions.filter((a) => a.type === 'move') : [];
   const targets: Cell[] = choosing ? state.legalActions.map((a) => a.to) : [];
@@ -52,11 +61,13 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame }: Props) {
     <div className="min-h-full flex flex-col lg:flex-row gap-3 p-2 sm:p-4 max-w-6xl mx-auto">
       <div className="flex-1 flex flex-col items-center gap-3">
         <div className="w-full max-w-[min(92vw,640px)] flex items-center justify-between text-sm">
-          <button type="button" onClick={onNewGame} className="text-stone-300 hover:text-white">← Новая партия</button>
+          <button type="button" onClick={onNewGame} className="text-stone-300 hover:text-white">{newGameLabel}</button>
           <button type="button" onClick={onToggleTheme} className="text-stone-300 hover:text-white" data-testid="toggle-theme">
             Тема: {theme === 'wood' ? 'Classic Wood' : 'Modern'}
           </button>
         </div>
+        {banner}
+        {game.error && <div className="w-full max-w-[min(92vw,640px)] rounded-lg bg-rose-900/70 text-rose-100 text-sm px-3 py-2">{game.error}</div>}
         <Board
           state={state}
           overrides={game.overrides}
@@ -75,7 +86,9 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame }: Props) {
               <div data-testid="status" className="font-bold">
                 <span className="inline-block w-3 h-3 rounded-full mr-2 align-middle" style={{ background: cur.color }} />
                 {cur.nickname}
-                {state.phase === 'awaitingRoll' && (
+                {isBotTurn && <span className="text-sky-300 font-medium"> 🤖 думает…</span>}
+                {waitingOther && !isBotTurn && <span className="text-stone-400 font-medium"> — ждём ход{state.phase === 'awaitingAction' ? ` (выпало ${state.currentRoll})` : ''}</span>}
+                {myTurn && state.phase === 'awaitingRoll' && (
                   <span className="text-stone-300 font-medium"> — {state.freeRollAvailable ? 'бросайте кубик' : `бонусный бросок (осталось ${cur.bonusRollsRemaining})`}</span>
                 )}
                 {choosing && <span className="text-stone-300 font-medium"> — выпало {state.currentRoll}, выберите фигуру</span>}
@@ -96,7 +109,7 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame }: Props) {
               Бросить
             </button>
           )}
-          {finished && (
+          {finished && canStartNew && (
             <button type="button" onClick={onNewGame} className="px-4 py-3 rounded-xl bg-yellow-400 text-stone-900 font-black">Новая партия</button>
           )}
         </div>
@@ -113,6 +126,9 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame }: Props) {
               spawnAction={p.id === cur.id ? spawnAction : undefined}
               onSpawn={(id) => game.choose(id)}
               overrides={game.overrides}
+              isBot={game.botIds.has(p.id)}
+              isMe={game.myPlayerId === p.id}
+              disconnected={game.disconnectedIds?.has(p.id) ?? false}
             />
           ))}
         </div>
@@ -131,7 +147,11 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame }: Props) {
             <div className="text-6xl">🏆</div>
             <div className="text-2xl font-black mt-2" style={{ color: winner.color }}>{winner.nickname}</div>
             <div className="text-stone-300 mt-1">заполнил всю диагональ от {winner.corner}!</div>
-            <button type="button" onClick={onNewGame} className="mt-5 w-full py-3 rounded-xl bg-yellow-400 text-stone-900 font-black">Новая партия</button>
+            {canStartNew ? (
+              <button type="button" onClick={onNewGame} className="mt-5 w-full py-3 rounded-xl bg-yellow-400 text-stone-900 font-black">Новая партия</button>
+            ) : (
+              <div className="mt-5 text-stone-400 text-sm">Хозяин комнаты может начать новую партию</div>
+            )}
           </div>
         </div>
       )}
