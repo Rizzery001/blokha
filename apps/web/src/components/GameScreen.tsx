@@ -7,7 +7,7 @@ import { Dice } from './Dice';
 import { PlayerPanel } from './PlayerPanel';
 import { Toasts } from './Toasts';
 import { useIsDesktop } from '../game/useMedia';
-import { DICE_SETTLE_MS } from '../game/usePresenter';
+import { DICE_SETTLE_MS, FAST } from '../game/usePresenter';
 
 const BLOCK_TEXT: Record<string, string> = {
   inReserveNeedsSix: 'нужна шестёрка',
@@ -45,6 +45,18 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [game.log.length, logOpen]);
+  // Единственный легальный ход выполняется сам: игроку не нужно кликать, если выбора нет.
+  const soleActionId =
+    state && state.phase === 'awaitingAction' && state.legalActions.length === 1 && !game.animating && !game.rolling
+      ? state.legalActions[0]!.id
+      : null;
+  const curId = state ? currentPlayer(state).id : null;
+  const autoAllowed = !!state && curId !== null && !game.botIds.has(curId) && (game.myPlayerId === null || game.myPlayerId === curId);
+  useEffect(() => {
+    if (!soleActionId || !autoAllowed) return;
+    const t = setTimeout(() => game.choose(soleActionId), FAST ? 0 : 450);
+    return () => clearTimeout(t);
+  }, [soleActionId, autoAllowed, game]);
   if (!state) return null;
 
   const cur = currentPlayer(state);
