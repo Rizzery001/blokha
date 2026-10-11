@@ -16,7 +16,8 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r typecheck",
-    "e2e": "node e2e/local-game.mjs && node e2e/bot-game.mjs && node e2e/online-room.mjs"
+    "e2e": "node e2e/local-game.mjs && node e2e/bot-game.mjs && node e2e/online-room.mjs",
+    "e2e:prod": "node e2e/local-game.mjs http://localhost:3001 && node e2e/bot-game.mjs http://localhost:3001 && node e2e/online-room.mjs http://localhost:3001"
   },
   "devDependencies": {
     "playwright": "1.56.1"

@@ -1,0 +1,31 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.28.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - name: E2E (Playwright, production server)
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          (cd apps/server && PORT=3001 BOT_DELAY_MS=30 node dist/index.js &) 
+          sleep 3
+          node e2e/local-game.mjs http://localhost:3001
+          node e2e/bot-game.mjs http://localhost:3001
+          node e2e/online-room.mjs http://localhost:3001

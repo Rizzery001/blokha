@@ -24,7 +24,7 @@ pnpm typecheck
 pnpm dev           # сервер комнат :3001 + web-клиент http://localhost:5173 (vite проксирует /socket.io)
 pnpm build         # engine/shared typecheck, web → apps/web/dist, server → apps/server/dist
 pnpm start         # продакшен: сервер раздаёт собранный клиент и WebSocket на $PORT
-pnpm e2e           # Playwright: локальная партия, партия с роботами, онлайн-комната (нужен pnpm dev)
+pnpm e2e           # Playwright: локальная партия, роботы, онлайн-комната (нужен pnpm dev; или pnpm e2e:prod после pnpm build + pnpm start)
 ```
 
 ## Режимы
@@ -89,6 +89,8 @@ pnpm e2e           # Playwright: локальная партия, партия �
 
 ## Деплой (Railway или любой хост с постоянными WebSocket)
 
+Подробно: [docs/DEPLOY.md](docs/DEPLOY.md).
+
 Один сервис из `Dockerfile` в корне: сервер Express + Socket.IO раздаёт собранный web-клиент и
 WebSocket на `$PORT`, health-check `/health`. Переменные: `PORT` (ставит Railway), опционально `BOT_DELAY_MS`.
 `railway.json` уже настроен; достаточно подключить репозиторий к проекту Railway.
@@ -103,4 +105,4 @@ WebSocket на `$PORT`, health-check `/health`. Переменные: `PORT` (с
 - [x] Этап 2 — локальная игра hot seat (React + Vite + Tailwind, e2e-партия через Playwright)
 - [x] Этап 3 — онлайн-комнаты (Socket.IO, авторитетный сервер, переподключение, ссылки-приглашения, роботы)
 - [x] Этап 4 — оформление: Classic Wood по фото и Modern, кубик 3D над доской, объёмные фигуры с пошаговым движением, стрелки авто-перемещений, уведомления, конфетти, мобильный экран
-- [ ] Этап 5 — сборка, деплой
+- [x] Этап 5 — продакшен-сборка, e2e против собранного сервера, CI (GitHub Actions), [инструкция деплоя](docs/DEPLOY.md)
