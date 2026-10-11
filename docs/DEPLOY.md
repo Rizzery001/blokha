@@ -4,13 +4,25 @@
 Сервер раздаёт собранный web-клиент и обрабатывает комнаты, поэтому хостинг только
 статических сайтов (GitHub Pages, Netlify без функций, Vercel static) не подходит для онлайна.
 
-## Railway (рекомендуется)
+## Fly.io (основной вариант)
 
-1. New Project → Deploy from GitHub repo → `Rizzery001/blokha`.
-2. Railway найдёт `railway.json` и соберёт образ из `Dockerfile` (сборка ~2–3 минуты).
-3. Переменные окружения не обязательны. `PORT` Railway выставляет сам; при желании `BOT_DELAY_MS=1100`.
-4. Settings → Networking → Generate Domain. Health-check: `/health`.
-5. Откройте домен: главный экран → «Онлайн-комната» → «Создать комнату» → отправьте ссылку друзьям.
+Конфигурация — `fly.toml` в корне (один процесс, порт 3001, health-check `/health`,
+машина не засыпает, чтобы не терять партии в памяти).
+
+```bash
+flyctl auth login
+flyctl launch --copy-config --no-deploy   # создаст приложение; имя в fly.toml при необходимости поменяйте
+flyctl deploy                              # сборка из Dockerfile и выкладка
+flyctl open                                # откроет https://<app>.fly.dev
+```
+
+Переменные окружения уже заданы в `[env]`; менять ничего не нужно. Логи: `flyctl logs`.
+Для автодеплоя из GitHub добавьте секрет `FLY_API_TOKEN` (`flyctl tokens create deploy`) —
+workflow `.github/workflows/fly.yml` выкладывает `main` после зелёного CI.
+
+**Важно:** `min_machines_running = 1` и `auto_stop_machines = "off"` держат одну машину
+постоянно; иначе Fly усыпит её при отсутствии трафика и все комнаты из памяти пропадут.
+Одна машина `shared-cpu-1x / 256 MB` для семейных партий достаточна.
 
 ## Любой VPS / Docker
 
@@ -39,7 +51,8 @@ PORT=3001 pnpm start
 
 - **Комнаты хранятся в памяти процесса.** Перезапуск, редеплой или падение сервера удаляет все
   партии; клиенты получают сообщение «Комната недоступна» и возвращаются на главный экран. Для
-  сохранности реализуйте `RoomStore` (`apps/server/src/roomStore.ts`) поверх Redis/Postgres.
+  сохранности реализуйте `RoomStore` (`apps/server/src/roomStore.ts`) поверх Redis/Postgres
+  (на Fly — Upstash Redis или Fly Postgres).
 - Один экземпляр сервера: горизонтальное масштабирование потребует общего хранилища и адаптера Socket.IO.
 - Неактивные комнаты удаляются через 6 часов.
 - Нет аккаунтов: вход по гостевому нику и токену места, который хранится в браузере игрока.
