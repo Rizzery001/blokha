@@ -31,7 +31,7 @@ export function PieceShape({ kind, color, className }: { kind: string; color: st
           <stop offset="1" stopColor="#000" stopOpacity="0.4" />
         </linearGradient>
       </defs>
-      <path d={d} fill={color} stroke="rgba(20,10,0,0.75)" strokeWidth="3" strokeLinejoin="round" />
+      <path d={d} fill={color} stroke="rgba(20,10,0,0.55)" strokeWidth="4" strokeLinejoin="round" />
       <path d={d} fill={`url(#${id})`} />
     </svg>
   );

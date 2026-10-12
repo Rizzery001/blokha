@@ -1,8 +1,7 @@
 import { allCells, getCellForProgress, parseCell, type Cell, type GameState, type LegalAction } from '@blokha/game-engine';
 import type { ArrowOverlay } from '../game/usePresenter';
 import type { AnimOverrides } from '../game/useLocalGame';
-import { glyphFor } from '../game/pieceSets';
-import { PieceShape } from './PieceShapes';
+import { PieceToken } from './PieceToken';
 
 export interface BoardPiece {
   pieceId: string;
@@ -125,15 +124,14 @@ export function Board({ state, overrides, theme, selectableActions, onPieceClick
                 className={`relative min-h-0 min-w-0 ${dark ? 'cell-dark' : 'cell-light'} ${special ? (special.tone === 'good' ? 'special-good' : 'special-bad') : ''} ${isTarget ? 'cell-target' : ''} ${isFlash ? 'cell-flash' : ''} ${onPath ? 'cell-path' : ''} ${isPreviewDest ? 'cell-preview-dest' : ''}`}
                 title={special?.title}
               >
-                {home && !isCorner && <div className="absolute inset-[20%] rounded-full opacity-75" style={{ border: `3px dashed ${home}` }} aria-hidden />}
-                {home && isCorner && <div className="absolute inset-0 opacity-70" style={{ boxShadow: `inset 0 0 0 4px ${home}` }} aria-hidden />}
+                {home && !isCorner && <div className="home-inlay" style={{ ['--hc' as string]: home }} aria-hidden />}
+                {home && isCorner && <div className="home-corner" style={{ ['--hc' as string]: home }} aria-hidden />}
                 {special && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center stencil">
-                    <span className="text-[clamp(13px,4vw,30px)]">{special.num}</span>
-                    <span className="text-[clamp(5px,1.25vw,9px)] text-center px-0.5">{special.word}</span>
+                  <div className={`plaque ${special.tone === 'good' ? 'plaque-good' : 'plaque-bad'}`}>
+                    <span className="plaque-num">{special.num}</span>
+                    <span className="plaque-word">{special.word}</span>
                   </div>
                 )}
-                <span className={`absolute left-[4%] top-[2%] text-[clamp(6px,1.3vw,9px)] font-bold ${dark ? 'text-amber-100/35' : 'text-stone-800/35'}`}>{cell}</span>
                 {piece && (
                   <button
                     key={piece.moving ? `${piece.pieceId}@${cell}` : piece.pieceId}
@@ -151,7 +149,7 @@ export function Board({ state, overrides, theme, selectableActions, onPieceClick
                     title={piece.lapDone ? (piece.onFinish ? 'На финишной диагонали' : 'Полный круг пройден: может идти на диагональ') : undefined}
                     style={{ ['--pc' as string]: piece.color }}
                   >
-                    <PieceGlyph color={piece.color} glyph={piece.glyph} index={piece.index} lapDone={piece.lapDone} />
+                    <PieceToken color={piece.color} kind={piece.glyph} index={piece.index} lapDone={piece.lapDone} />
                   </button>
                 )}
               </div>
@@ -213,16 +211,7 @@ function Corner() {
 }
 
 export function PieceGlyph({ color, glyph, index, size = 'board', lapDone = false }: { color: string; glyph: string; index: number; size?: 'board' | 'small'; lapDone?: boolean }) {
-  const cls = size === 'board' ? 'text-[clamp(18px,6.4vw,48px)]' : 'text-[30px]';
-  return (
-    <span className={`piece relative inline-flex items-center justify-center w-full h-full leading-none ${lapDone ? 'piece-lap' : ''} ${size === 'small' ? 'piece-small' : ''}`} style={{ ['--pc' as string]: color }}>
-      <span className="piece-base" aria-hidden />
-      <PieceShape kind={glyph} color={color} className={`piece-shape ${size === 'board' ? 'piece-shape-board' : 'piece-shape-small'}`} />
-      <span className={`piece-glyph ${cls} font-black hidden`}>{glyphFor(glyph)}</span>
-      <span className="piece-badge">{index}</span>
-      {lapDone && <span className="piece-lap-mark" aria-hidden>✓</span>}
-    </span>
-  );
+  return <PieceToken color={color} kind={glyph} index={index} lapDone={lapDone} size={size} />;
 }
 
 /** Большой кубик, падающий на доску и кувыркающийся, как настоящий. */
