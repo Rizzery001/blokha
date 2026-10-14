@@ -14,6 +14,9 @@ import { Toasts } from './Toasts';
 import { Avatar } from './Avatar';
 import { CaptureFlightLayer } from './CaptureFlightLayer';
 import { THEME_NAMES, type Theme } from '../game/theme';
+import { PHRASES } from '@blokha/shared';
+import { applyOutcome } from '../game/outcome';
+import type { ProfileDelta } from '../game/profile';
 
 const BLOCK_TEXT: Record<string, string> = {
   inReserveNeedsSix: 'нужна шестёрка',
@@ -36,6 +39,12 @@ interface Props {
   canStartNew?: boolean;
   series?: Record<string, number>;
   gamesPlayed?: number;
+  /** id людей за этим устройством (для начисления опыта) */
+  humanIds?: string[];
+  hardBotPresent?: boolean;
+  stake?: string;
+  onRematch?: (() => void) | undefined;
+  rematchLabel?: string;
 }
 
 /** Что произойдёт, если выбрать этот ход (для подсказки). */
@@ -60,7 +69,7 @@ function describeAction(game: GameController, a: LegalAction): string {
   return parts.join(' · ');
 }
 
-export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel = '← Новая партия', banner, canStartNew = true, series = {}, gamesPlayed = 0 }: Props) {
+export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel = '← Новая партия', banner, canStartNew = true, series = {}, gamesPlayed = 0, humanIds = [], hardBotPresent = false, stake = '', onRematch, rematchLabel = 'Реванш!' }: Props) {
   const { state } = game;
   const logRef = useRef<HTMLDivElement>(null);
   const [logOpen, setLogOpen] = useState(false);
@@ -107,9 +116,22 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
     }, TURN_REMINDER_MS);
     return () => clearTimeout(t);
   }, [phaseKey, myTurnNow]);
+  const [deltas, setDeltas] = useState<ProfileDelta[]>([]);
+  const appliedFor = useRef<string | null>(null);
   useEffect(() => {
     if (state?.phase === 'finished') setShowResults(true);
-  }, [state?.phase]);
+    if (state?.phase === 'finished' && !game.replaying) {
+      const key = `${state.players.map((p) => p.id).join(',')}:${state.version}`;
+      if (appliedFor.current !== key) {
+        appliedFor.current = key;
+        const inGame: Record<string, number> = {};
+        for (const [pid, list] of Object.entries(game.achievements)) inGame[pid] = list.length;
+        const res = applyOutcome(state, humanIds, game.botIds, hardBotPresent, game.steps, inGame);
+        setDeltas(res.deltas);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.phase, state?.version]);
 
   if (!state) return null;
 
@@ -166,6 +188,27 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
     </>
   );
 
+  let bestMoment: number | null = null;
+  {
+    let bestScore = 0;
+    game.steps.forEach((st, i) => {
+      for (const e of st.events) {
+        if (e.type === 'captured') {
+          const victim = st.before.players.find((p) => p.id === e.victimPlayerId);
+          const vp = victim?.pieces.find((p) => p.id === e.victimPieceId);
+          const score = 1 + (vp?.progress ?? 0);
+          if (score > bestScore) {
+            bestScore = score;
+            bestMoment = i;
+          }
+        }
+        if (e.type === 'rolled' && e.sixBonusGranted && (st.after.stats?.[e.playerId]?.sixStreak ?? 0) >= 3 && bestScore < 20) {
+          bestScore = 20;
+          bestMoment = i;
+        }
+      }
+    });
+  }
   const reactionsByPlayer = new Map<string, { id: number; emoji: string }[]>();
   for (const r of game.reactions ?? []) reactionsByPlayer.set(r.playerId, [...(reactionsByPlayer.get(r.playerId) ?? []), r]);
 
@@ -185,9 +228,14 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
         seriesWins={series[p.id] ?? 0}
         achievements={(game.achievements[p.id] ?? []).map((a) => a.icon).join('')}
       />
-      {(reactionsByPlayer.get(p.id) ?? []).map((r) => (
-        <span key={r.id} className="reaction-float right-2 top-0">{r.emoji}</span>
-      ))}
+      {(reactionsByPlayer.get(p.id) ?? []).map((r) => {
+        const phrase = (PHRASES as Record<string, string>)[r.emoji];
+        return phrase ? (
+          <span key={r.id} className="reaction-float right-2 top-0 text-sm font-bold bg-white text-stone-900 rounded-xl px-2 py-1 shadow-lg whitespace-nowrap">{phrase}</span>
+        ) : (
+          <span key={r.id} className="reaction-float right-2 top-0">{r.emoji}</span>
+        );
+      })}
     </div>
   );
 
@@ -209,6 +257,7 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
             </div>
           </div>
           {banner}
+          {game.replaying && <div className="w-full max-w-[min(94vw,640px)] rounded-lg bg-sky-900/70 text-sky-100 text-sm px-3 py-2">▶ Повтор партии…</div>}
           {game.error && <div className="w-full max-w-[min(94vw,640px)] rounded-lg bg-rose-900/70 text-rose-100 text-sm px-3 py-2">{game.error}</div>}
 
           {!desktop && (
@@ -277,7 +326,7 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
           </div>
         )}
 
-        {finished && winner && showResults && (
+        {finished && winner && showResults && !game.replaying && (
           <>
             <Confetti color={winner.color} />
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-20" data-testid="victory">
@@ -285,13 +334,24 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
                 <div className="flex items-center justify-center gap-3"><span className="text-5xl">🏆</span><Avatar emoji={winner.avatar} color={winner.color} size={64} active /></div>
                 <div className="text-2xl font-black mt-2" style={{ color: winner.color }}>{winner.nickname}</div>
                 <div className="mt-1" style={{ color: 'var(--muted)' }}>заполнил всю свою финишную диагональ!</div>
+                {stake && (
+                  <div className="mt-2 rounded-xl bg-amber-400/15 border border-amber-400/50 px-3 py-2 text-sm">
+                    Ставка партии: <b>{stake}</b> · проигравшие: {state.players.filter((p) => p.id !== winner.id).map((p) => p.nickname).join(', ')}
+                  </div>
+                )}
                 <div className="mt-4">
-                  <ResultsPanel state={state} achievements={game.achievements} series={series} gamesPlayed={gamesPlayed} />
+                  <ResultsPanel state={state} achievements={game.achievements} series={series} gamesPlayed={gamesPlayed} captureMatrix={game.captureMatrix} landings={game.landings} deltas={deltas} />
                 </div>
-                <div className="mt-5 flex gap-2">
+                <div className="mt-4 flex gap-2 flex-wrap text-sm">
+                  <button type="button" onClick={() => { setShowResults(false); void game.replay(); }} className="btn-secondary px-3 py-2 rounded-lg font-bold" data-testid="replay">▶ Повтор партии</button>
+                  {bestMoment !== null && (
+                    <button type="button" onClick={() => { setShowResults(false); void game.replay(bestMoment ?? undefined); }} className="btn-secondary px-3 py-2 rounded-lg font-bold">⭐ Лучший момент</button>
+                  )}
+                </div>
+                <div className="mt-3 flex gap-2">
                   <button type="button" onClick={() => setShowResults(false)} className="btn-secondary flex-1 py-3 rounded-xl font-bold">Посмотреть доску</button>
                   {canStartNew ? (
-                    <button type="button" onClick={onNewGame} className="btn-primary flex-1 py-3 rounded-xl font-black">Новая партия</button>
+                    <button type="button" onClick={onRematch ?? onNewGame} className="btn-primary flex-1 py-3 rounded-xl font-black" data-testid="rematch">{onRematch ? rematchLabel : 'Новая партия'}</button>
                   ) : (
                     <div className="flex-1 text-sm self-center" style={{ color: 'var(--muted)' }}>Хозяин комнаты может начать новую партию</div>
                   )}
@@ -300,7 +360,7 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
             </div>
           </>
         )}
-        {finished && winner && !showResults && (
+        {finished && winner && !showResults && !game.replaying && (
           <button type="button" onClick={() => setShowResults(true)} className="fixed bottom-4 right-4 z-20 btn-primary px-4 py-2 rounded-xl font-bold shadow-xl">Итоги партии</button>
         )}
       </div>

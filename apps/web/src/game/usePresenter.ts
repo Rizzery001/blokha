@@ -2,6 +2,9 @@ import { createGame, type Cell, type GameEvent, type GameState, type PlayerSetup
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { newAchievements, type Achievement } from './achievements';
 import { sfx } from './sound';
+import { commentate, speak } from './commentator';
+import { tutorialHint } from './tutorial';
+import { loadStore, saveStore } from './profile';
 
 export interface LogEntry {
   id: number;
@@ -74,7 +77,7 @@ export function describeEvent(state: GameState, e: GameEvent): LogEntry | null {
 export interface Notice {
   id: number;
   text: string;
-  tone: 'good' | 'bad' | 'info' | 'achievement';
+  tone: 'good' | 'bad' | 'info' | 'achievement' | 'hint';
   icon?: string;
 }
 
@@ -93,6 +96,12 @@ export interface CaptureFlight {
   color: string;
   kind: string;
   index: number;
+}
+
+export interface ReplayStep {
+  before: GameState;
+  after: GameState;
+  events: GameEvent[];
 }
 
 /** Общее для локальной и онлайн-игры: состояние, журнал, анимации. Расчёт движения — в движке/на сервере. */
@@ -114,6 +123,15 @@ export interface Presenter {
   flight: CaptureFlight | null;
   /** достижения за партию: playerId → список */
   achievements: Record<string, Achievement[]>;
+  /** запись партии: состояние до шага и события шага */
+  steps: ReplayStep[];
+  initialState: GameState | null;
+  /** проиграть запись: всю партию или один шаг (лучший момент) */
+  replay: (stepIndex?: number) => Promise<void>;
+  replaying: boolean;
+  /** кто выбил кого сколько раз и где приземлялись фигуры — для шутливых титулов */
+  captureMatrix: Record<string, Record<string, number>>;
+  landings: Record<string, Record<string, number>>;
   /** принять новое состояние с событиями: анимировать и опубликовать */
   ingest: (next: GameState, events: GameEvent[]) => Promise<void>;
   /** мгновенно показать состояние без анимации (восстановление) */
@@ -142,13 +160,21 @@ export function usePresenter(): Presenter {
   const [shake, setShake] = useState(false);
   const [flight, setFlight] = useState<CaptureFlight | null>(null);
   const flightId = useRef(1);
+  const stepsRef = useRef<ReplayStep[]>([]);
+  const [steps, setSteps] = useState<ReplayStep[]>([]);
+  const initialRef = useRef<GameState | null>(null);
+  const [replaying, setReplaying] = useState(false);
+  const captureMatrixRef = useRef<Record<string, Record<string, number>>>({});
+  const landingsRef = useRef<Record<string, Record<string, number>>>({});
+  const [captureMatrix, setCaptureMatrix] = useState<Record<string, Record<string, number>>>({});
+  const [landings, setLandings] = useState<Record<string, Record<string, number>>>({});
   const [achievements, setAchievements] = useState<Record<string, Achievement[]>>({});
   const notify = useCallback((text: string, tone: Notice['tone'], icon?: string) => {
     const id = noticeId.current++;
     const n: Notice = { id, text, tone };
     if (icon) n.icon = icon;
     setNotices((prev) => [...prev.slice(-3), n]);
-    setTimeout(() => setNotices((prev) => prev.filter((x) => x.id !== id)), FAST ? 50 : tone === 'achievement' ? 3600 : 2600);
+    setTimeout(() => setNotices((prev) => prev.filter((x) => x.id !== id)), FAST ? 50 : tone === 'achievement' ? 3600 : tone === 'hint' ? 7000 : 2600);
   }, []);
   const stateRef = useRef<GameState | null>(null);
   const mounted = useRef(true);
@@ -174,12 +200,45 @@ export function usePresenter(): Presenter {
     setState(s);
   }, []);
 
-  const animate = useCallback(async (next: GameState, events: GameEvent[]) => {
+  const animate = useCallback(async (next: GameState, events: GameEvent[], record = true) => {
     setAnimating(true);
     const ov: AnimOverrides = {};
+    const prevState = stateRef.current;
+    if (record && prevState) {
+      stepsRef.current = [...stepsRef.current, { before: prevState, after: next, events }];
+      setSteps(stepsRef.current);
+      for (const e of events) {
+        if (e.type === 'captured') {
+          const m = captureMatrixRef.current;
+          m[e.byPlayerId] = { ...(m[e.byPlayerId] ?? {}), [e.victimPlayerId]: (m[e.byPlayerId]?.[e.victimPlayerId] ?? 0) + 1 };
+        }
+        if (e.type === 'moved' && e.kind === 'normal') {
+          const l = landingsRef.current;
+          l[e.playerId] = { ...(l[e.playerId] ?? {}), [e.to]: (l[e.playerId]?.[e.to] ?? 0) + 1 };
+        }
+      }
+      setCaptureMatrix({ ...captureMatrixRef.current });
+      setLandings({ ...landingsRef.current });
+    }
+    const store = record ? loadStore() : null;
     for (const e of events) {
       if (!mounted.current) return;
       const name = (id: string) => next.players.find((p) => p.id === id)?.nickname ?? id;
+      if (record) {
+        const line = commentate(prevState, next, e);
+        if (line) {
+          notify(line, 'info', '🎙️');
+          speak(line);
+        }
+        if (store) {
+          const hint = tutorialHint(e, next, store.tutorialSeen);
+          if (hint) {
+            store.tutorialSeen[hint.id] = true;
+            saveStore(store);
+            notify(hint.text, 'hint', '💡');
+          }
+        }
+      }
       if (e.type === 'rolled') {
         setRolling(true);
         sfx.dice();
@@ -295,9 +354,35 @@ export function usePresenter(): Presenter {
     [animate],
   );
 
+  const replay = useCallback(
+    async (stepIndex?: number) => {
+      const all = stepsRef.current;
+      if (all.length === 0) return;
+      const final = stateRef.current;
+      setReplaying(true);
+      const list = stepIndex === undefined ? all : all.slice(stepIndex, stepIndex + 1);
+      const first = list[0]!;
+      setOverrides({});
+      commit(first.before);
+      await sleep(FAST ? 0 : 400);
+      for (const st of list) {
+        if (!mounted.current) return;
+        await animate(st.after, st.events, false);
+      }
+      if (final) commit(final);
+      setReplaying(false);
+    },
+    [animate, commit],
+  );
+
   const setImmediate = useCallback(
     (next: GameState | null, note?: string) => {
       setOverrides({});
+      stepsRef.current = [];
+      setSteps([]);
+      initialRef.current = next;
+      captureMatrixRef.current = {};
+      landingsRef.current = {};
       commit(next);
       if (note) setLog((prev) => [...prev, { id: logId.current++, text: note, tone: 'info' }]);
     },
@@ -311,6 +396,13 @@ export function usePresenter(): Presenter {
       setLastRoll(null);
       setOverrides({});
       setAchievements({});
+      stepsRef.current = [];
+      setSteps([]);
+      initialRef.current = res.state;
+      captureMatrixRef.current = {};
+      landingsRef.current = {};
+      setCaptureMatrix({});
+      setLandings({});
       commit(res.state);
       pushLog(res.state, res.events);
       return res;
@@ -325,7 +417,10 @@ export function usePresenter(): Presenter {
     setLastRoll(null);
     setRolling(false);
     setAchievements({});
+    stepsRef.current = [];
+    setSteps([]);
+    initialRef.current = null;
   }, [commit]);
 
-  return { state, log, animating, overrides, lastRoll, rolling, flashCell, notices, arrow, captureCell, shake, flight, achievements, ingest, setImmediate, startFresh, reset, stateRef, setRolling, busy: animating || rolling };
+  return { state, log, animating, overrides, lastRoll, rolling, flashCell, notices, arrow, captureCell, shake, flight, achievements, steps, initialState: initialRef.current, replay, replaying, captureMatrix, landings, ingest, setImmediate, startFresh, reset, stateRef, setRolling, busy: animating || rolling || replaying };
 }

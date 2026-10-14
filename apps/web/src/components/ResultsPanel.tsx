@@ -2,12 +2,17 @@ import type { GameState, PlayerStats } from '@blokha/game-engine';
 import { finalAwards } from '../game/achievements';
 import type { Achievement } from '../game/achievements';
 import { Avatar } from './Avatar';
+import { funTitles, luck } from '../game/outcome';
+import { levelFromXp, type ProfileDelta } from '../game/profile';
 
 interface Props {
   state: GameState;
   achievements: Record<string, Achievement[]>;
   series: Record<string, number>;
   gamesPlayed: number;
+  captureMatrix?: Record<string, Record<string, number>>;
+  landings?: Record<string, Record<string, number>>;
+  deltas?: ProfileDelta[];
 }
 
 const COLS: { key: keyof PlayerStats; label: string; title: string }[] = [
@@ -21,8 +26,13 @@ const COLS: { key: keyof PlayerStats; label: string; title: string }[] = [
 ];
 
 /** Итоги партии: таблица, награды, достижения, счёт серии. */
-export function ResultsPanel({ state, achievements, series, gamesPlayed }: Props) {
+export function ResultsPanel({ state, achievements, series, gamesPlayed, captureMatrix = {}, landings = {}, deltas = [] }: Props) {
   const awards = finalAwards(state);
+  const titles = funTitles(state, captureMatrix, landings);
+  const luckRows = luck(state).filter((r) => r.rolls >= 12);
+  const luckiest = luckRows.length ? [...luckRows].sort((a, b) => b.delta - a.delta)[0]! : null;
+  const unluckiest = luckRows.length ? [...luckRows].sort((a, b) => a.delta - b.delta)[0]! : null;
+  const nm = (id: string) => state.players.find((p) => p.id === id)?.nickname ?? id;
   const rows = [...state.players].sort((a, b) => {
     const sa = state.stats?.[a.id];
     const sb = state.stats?.[b.id];
@@ -71,6 +81,39 @@ export function ResultsPanel({ state, achievements, series, gamesPlayed }: Props
               {a.icon} {a.title}: <b>{state.players.find((p) => p.id === a.playerId)?.nickname}</b> ({a.value})
             </span>
           ))}
+        </div>
+      )}
+      {titles.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {titles.map((t, i) => (
+            <span key={i} className="rounded-full bg-sky-400/15 border border-sky-400/40 px-2 py-0.5 text-xs">{t.icon} {t.title}: <b>{nm(t.playerId)}</b></span>
+          ))}
+        </div>
+      )}
+      {luckiest && unluckiest && luckiest.playerId !== unluckiest.playerId && (
+        <div className="mt-2 text-xs" style={{ color: 'var(--muted)' }}>
+          🍀 Везение: {nm(luckiest.playerId)} выбросил {luckiest.sixes} шестёрок при норме {luckiest.expected.toFixed(1)}
+          {luckiest.delta >= 3 ? ' — читер?' : ''}; {nm(unluckiest.playerId)}: {unluckiest.sixes} при норме {unluckiest.expected.toFixed(1)}.
+        </div>
+      )}
+      {deltas.length > 0 && (
+        <div className="mt-3 space-y-1">
+          {deltas.map((d) => {
+            const lvl = levelFromXp(0);
+            void lvl;
+            return (
+              <div key={d.name} className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 text-xs">
+                <b>{d.name}</b>: +{d.xpGained} опыта
+                {d.levelAfter > d.levelBefore && <span className="ml-1 font-black text-amber-300">⬆ уровень {d.levelAfter}!</span>}
+                {d.newLifetime.map((a) => (
+                  <span key={a.id} className="ml-2">{a.icon} {a.title}{a.unlocks ? ` (открыто: ${a.unlocks.label})` : ''}</span>
+                ))}
+                {d.questsDone.map((q) => (
+                  <span key={q.id} className="ml-2">✅ задание: {q.title}</span>
+                ))}
+              </div>
+            );
+          })}
         </div>
       )}
       {Object.values(achievements).some((l) => l.length > 0) && (

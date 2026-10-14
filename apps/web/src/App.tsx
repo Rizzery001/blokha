@@ -7,9 +7,13 @@ import { OnlineScreen } from './components/OnlineScreen';
 import { SetupScreen } from './components/SetupScreen';
 import { useLocalGame } from './game/useLocalGame';
 import { loadCredentials, useOnlineGame } from './game/useOnlineGame';
-import { THEME_NAMES, loadTheme, nextTheme, type Theme } from './game/theme';
+import { THEME_NAMES, THEMES, loadTheme, type Theme } from './game/theme';
+import { ProfileScreen } from './components/ProfileScreen';
+import { loadStore, unlockedCosmetics } from './game/profile';
+import { setVoice } from './game/commentator';
+import type { LocalPlayerSetup } from './game/useLocalGame';
 
-type Screen = 'home' | 'setup' | 'game' | 'online';
+type Screen = 'home' | 'setup' | 'game' | 'online' | 'profile';
 
 
 function roomFromUrl(): string {
@@ -35,7 +39,20 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
     });
   }, [game.state]);
   const online = useOnlineGame(screen === 'online');
-  const toggleTheme = () => setTheme((t) => nextTheme(t));
+  const [stake, setStake] = useState('');
+  const [rematchRows, setRematchRows] = useState<LocalPlayerSetup[] | undefined>(undefined);
+  useEffect(() => {
+    setVoice(loadStore().settings.voice);
+  }, []);
+  const toggleTheme = () =>
+    setTheme((t) => {
+      // тема Modern открывается достижением «Дизайнер» у любого профиля на устройстве
+      const store = loadStore();
+      const open = new Set<string>(['wood', 'light']);
+      for (const p of Object.values(store.profiles)) for (const th of unlockedCosmetics(p).themes) open.add(th);
+      const order = THEMES.filter((x) => open.has(x));
+      return order[(order.indexOf(t) + 1) % order.length] ?? 'wood';
+    });
   useEffect(() => {
     try {
       localStorage.setItem('blokha.theme', theme);
@@ -79,7 +96,12 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
           canStartNew={isHost}
           series={room.series}
           gamesPlayed={room.gamesPlayed}
+          humanIds={online.myPlayerId ? [online.myPlayerId] : []}
+          hardBotPresent={room.seats.some((s) => s.isBot && s.botLevel === 'hard')}
           banner={bannerWithActions}
+          onRematch={isHost ? () => { void online.newGame().then((err) => { if (!err) setTimeout(() => void online.start(), 300); }); } : undefined}
+          rematchLabel="Реванш!"
+
           onNewGame={() => {
             if (isHost) void online.newGame();
             else {
@@ -106,7 +128,16 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
     return <Shell theme={theme}><OnlineScreen online={online} initialCode={urlRoom} onBack={() => setScreen('home')} /></Shell>;
   }
 
+  if (screen === 'profile') {
+    return (
+      <Shell theme={theme}>
+        <ProfileScreen onBack={() => setScreen('home')} initialName={game.lastSetup?.find((p) => !p.isBot)?.nickname ?? 'Игрок 1'} />
+      </Shell>
+    );
+  }
   if (screen === 'game' && game.state) {
+    const humans = (game.lastSetup ?? []).filter((p) => !p.isBot).map((p) => p.id);
+    const hard = (game.lastSetup ?? []).some((p) => p.isBot && p.botLevel === 'hard');
     return (
       <GameScreen
         game={game}
@@ -114,7 +145,17 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
         onToggleTheme={toggleTheme}
         series={localSeries.wins}
         gamesPlayed={localSeries.games}
+        humanIds={humans}
+        hardBotPresent={hard}
+        stake={stake}
+        onRematch={() => {
+          const setup = game.lastSetup;
+          if (!setup) return;
+          game.reset();
+          game.start(setup);
+        }}
         onNewGame={() => {
+          setRematchRows(game.lastSetup ?? undefined);
           game.reset();
           setScreen('setup');
         }}
@@ -126,6 +167,8 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
       <Shell theme={theme}>
         <SetupScreen
           onBack={() => setScreen('home')}
+          initialRows={rematchRows}
+          onStake={setStake}
           onStart={(players) => {
             game.start(players);
             setScreen('game');
@@ -146,6 +189,9 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
           </button>
           <button type="button" data-testid="play-online" onClick={() => setScreen('online')} className="btn-secondary py-3.5 rounded-xl font-bold text-lg">
             Онлайн-комната
+          </button>
+          <button type="button" data-testid="profile" onClick={() => setScreen('profile')} className="btn-secondary py-3 rounded-xl font-bold">
+            🏅 Профиль, достижения, лидеры
           </button>
           <button type="button" onClick={toggleTheme} className="py-2 text-sm hover:underline" style={{ color: 'var(--muted)' }}>
             🎨 Тема: {THEME_NAMES[theme]}

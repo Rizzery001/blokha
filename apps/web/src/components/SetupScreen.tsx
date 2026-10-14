@@ -1,6 +1,7 @@
 import { CORNERS, type BotLevel, type Corner } from '@blokha/game-engine';
 import { AVATARS, BOT_AVATARS } from '@blokha/shared';
 import { Avatar } from './Avatar';
+import { getProfile, loadStore, unlockHint, unlockedCosmetics } from '../game/profile';
 import type { LocalPlayerSetup } from '../game/useLocalGame';
 import { useState } from 'react';
 import { CORNER_INFO, PIECE_SETS, PLAYER_COLORS, cornerTitle } from '../game/pieceSets';
@@ -33,9 +34,12 @@ export function buildPlayers(rows: Row[]): LocalPlayerSetup[] {
   return rows.map((r, i) => ({ id: `p${i + 1}`, nickname: r.nickname.trim() || `Игрок ${i + 1}`, corner: r.corner, pieceSet: r.pieceSet, color: r.color, isBot: r.isBot, botLevel: r.botLevel, avatar: r.avatar }));
 }
 
-export function SetupScreen({ onStart, onBack }: { onStart: (players: LocalPlayerSetup[]) => void; onBack: () => void }) {
-  const [count, setCount] = useState(2);
-  const [rows, setRows] = useState<Row[]>(DEFAULT_ROWS);
+export function SetupScreen({ onStart, onBack, initialRows, onStake }: { onStart: (players: LocalPlayerSetup[]) => void; onBack: () => void; initialRows?: LocalPlayerSetup[] | undefined; onStake?: ((s: string) => void) | undefined }) {
+  const store = loadStore();
+  const unlockedFor = (nick: string) => unlockedCosmetics(store.profiles[nick.trim().toLowerCase()] ?? null);
+  const [stake, setStake] = useState('');
+  const [count, setCount] = useState(initialRows?.length ?? 2);
+  const [rows, setRows] = useState<Row[]>(() => initialRows ? initialRows.map((p, i) => ({ nickname: p.nickname, corner: p.corner, pieceSet: p.pieceSet ?? 'pawn', color: p.color ?? DEFAULT_ROWS[i]!.color, isBot: !!p.isBot, botLevel: p.botLevel ?? 'normal', avatar: p.avatar ?? '🦊' })).concat(DEFAULT_ROWS.slice(initialRows.length)) : DEFAULT_ROWS);
   const [avatarPicker, setAvatarPicker] = useState<number | null>(null);
   const active = rows.slice(0, count);
   const cornerDup = new Set(active.map((r) => r.corner)).size !== active.length;
@@ -102,11 +106,15 @@ export function SetupScreen({ onStart, onBack }: { onStart: (players: LocalPlaye
             </div>
             {avatarPicker === i && (
               <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Аватар">
-                {[...(row.isBot ? BOT_AVATARS : []), ...AVATARS].map((a) => (
-                  <button key={a} type="button" role="radio" aria-checked={row.avatar === a} onClick={() => { update(i, { avatar: a }); setAvatarPicker(null); }} className={`w-9 h-9 rounded-lg text-xl ${row.avatar === a ? 'bg-yellow-400' : 'bg-stone-700'}`}>
-                    {a}
-                  </button>
-                ))}
+                {[...(row.isBot ? BOT_AVATARS : []), ...AVATARS].map((a) => {
+                  const locked = !row.isBot && !unlockedFor(row.nickname).avatars.has(a);
+                  return (
+                    <button key={a} type="button" role="radio" aria-checked={row.avatar === a} disabled={locked} title={locked ? `🔒 ${unlockHint('avatar', a) ?? 'откроется позже'}` : undefined} onClick={() => { update(i, { avatar: a }); setAvatarPicker(null); }} className={`w-9 h-9 rounded-lg text-xl relative ${row.avatar === a ? 'bg-yellow-400' : 'bg-stone-700'} ${locked ? 'opacity-40 grayscale' : ''}`}>
+                      {a}
+                      {locked && <span className="absolute -right-1 -bottom-1 text-[10px]">🔒</span>}
+                    </button>
+                  );
+                })}
               </div>
             )}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -132,19 +140,24 @@ export function SetupScreen({ onStart, onBack }: { onStart: (players: LocalPlaye
               </div>
               <div className="flex items-center gap-1" role="radiogroup" aria-label="Набор фигур">
                 <span className="text-xs mr-1" style={{ color: 'var(--muted)' }}>Фигуры</span>
-                {PIECE_SETS.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={row.pieceSet === s.id}
-                    title={s.name}
-                    onClick={() => update(i, { pieceSet: s.id })}
-                    className={`w-9 h-9 rounded-md text-xl leading-none ${row.pieceSet === s.id ? 'bg-yellow-400 text-stone-900' : 'bg-stone-700 text-stone-200'}`}
-                  >
-                    {s.glyph}
-                  </button>
-                ))}
+                {PIECE_SETS.map((s) => {
+                  const locked = !row.isBot && !unlockedFor(row.nickname).pieceSets.has(s.id);
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={row.pieceSet === s.id}
+                      disabled={locked}
+                      title={locked ? `🔒 ${s.name}: ${unlockHint('pieceSet', s.id) ?? ''}` : s.name}
+                      onClick={() => update(i, { pieceSet: s.id })}
+                      className={`w-9 h-9 rounded-md text-xl leading-none relative ${row.pieceSet === s.id ? 'bg-yellow-400 text-stone-900' : 'bg-stone-700 text-stone-200'} ${locked ? 'opacity-40' : ''}`}
+                    >
+                      {s.glyph}
+                      {locked && <span className="absolute -right-1 -bottom-1 text-[10px]">🔒</span>}
+                    </button>
+                  );
+                })}
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-xs mr-1" style={{ color: 'var(--muted)' }}>Цвет</span>
@@ -168,6 +181,10 @@ export function SetupScreen({ onStart, onBack }: { onStart: (players: LocalPlaye
         ))}
       </div>
 
+      <div className="mt-4 panel rounded-xl p-3 flex items-center gap-3">
+        <span className="text-sm whitespace-nowrap">🎁 Играем на…</span>
+        <input value={stake} onChange={(e) => { setStake(e.target.value); onStake?.(e.target.value); }} maxLength={40} placeholder="кто моет посуду (необязательно)" className="flex-1 min-w-0 bg-stone-900 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 ring-yellow-400" data-testid="stake" />
+      </div>
       {cornerDup && <p className="mt-3 text-rose-300 text-sm">У каждого игрока должен быть свой угол.</p>}
       <button
         type="button"

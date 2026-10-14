@@ -33,6 +33,8 @@ export interface GameController extends Presenter {
 
 export interface LocalGame extends GameController {
   start: (players: LocalPlayerSetup[]) => void;
+  lastSetup: LocalPlayerSetup[] | null;
+  botLevels: Record<string, BotLevel>;
 }
 
 const BOT_DELAY_MS = FAST ? 5 : 700;
@@ -43,10 +45,12 @@ export function useLocalGame(dice?: DiceRoller): LocalGame {
   const diceRef = useRef<DiceRoller>(dice ?? createCryptoDiceRoller());
   const [botIds, setBotIds] = useState<Set<string>>(new Set());
   const botLevels = useRef<Record<string, BotLevel>>({});
+  const [lastSetup, setLastSetup] = useState<LocalPlayerSetup[] | null>(null);
   const pending = useRef(false);
 
   const start = useCallback(
     (players: LocalPlayerSetup[]) => {
+      setLastSetup(players);
       setBotIds(new Set(players.filter((p) => p.isBot).map((p) => p.id)));
       botLevels.current = Object.fromEntries(players.filter((p) => p.isBot).map((p) => [p.id, p.botLevel ?? 'normal']));
       presenter.startFresh(players.map(({ isBot, botLevel, ...p }) => p));
@@ -92,5 +96,5 @@ export function useLocalGame(dice?: DiceRoller): LocalGame {
     return () => clearTimeout(t);
   }, [state, busy, botIds, roll, choose, stateRef]);
 
-  return { ...presenter, myPlayerId: null, botIds, roll, choose, start, error: null };
+  return { ...presenter, myPlayerId: null, botIds, roll, choose, start, error: null, lastSetup, botLevels: botLevels.current };
 }

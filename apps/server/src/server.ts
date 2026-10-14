@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import express from 'express';
 import { Server, type Socket } from 'socket.io';
-import { REACTIONS, type Ack, type ClientToServerEvents, type Credentials, type ServerToClientEvents } from '@blokha/shared';
+import { ALL_REACTIONS, type Ack, type ClientToServerEvents, type Credentials, type ServerToClientEvents } from '@blokha/shared';
 import { InMemoryRoomStore, type RoomStore } from './roomStore';
 import { RoomError, RoomService } from './roomService';
 
@@ -162,7 +162,7 @@ export function createBlokhaServer(opts: BlokhaServerOptions = {}): BlokhaServer
     socket.on('room:react', (payload, ack) =>
       withAuth(socket, ack, (creds) => {
         const emoji = payload?.emoji;
-        if (!REACTIONS.includes(emoji)) return fail('badRequest', 'Неизвестная реакция');
+        if (!ALL_REACTIONS.includes(emoji)) return fail('badRequest', 'Неизвестная реакция');
         const now = Date.now();
         const key = `${creds.code}:${creds.playerId}`;
         if (now - (lastReaction.get(key) ?? 0) < 1500) return { ok: true };

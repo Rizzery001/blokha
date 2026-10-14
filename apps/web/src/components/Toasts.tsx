@@ -8,7 +8,7 @@ export function Toasts({ notices }: { notices: Notice[] }) {
         <div
           key={n.id}
           className={`toast rounded-xl px-4 py-2 text-sm font-bold shadow-xl backdrop-blur ${
-            n.tone === 'good' ? 'bg-emerald-600/90 text-white' : n.tone === 'bad' ? 'bg-rose-700/90 text-white' : n.tone === 'achievement' ? 'bg-amber-400 text-stone-900 badge-pop border-2 border-white' : 'bg-stone-700/90 text-white'
+            n.tone === 'good' ? 'bg-emerald-600/90 text-white' : n.tone === 'bad' ? 'bg-rose-700/90 text-white' : n.tone === 'achievement' ? 'bg-amber-400 text-stone-900 badge-pop border-2 border-white' : n.tone === 'hint' ? 'bg-sky-700/95 text-white border border-sky-300/50 text-left font-medium' : 'bg-stone-700/90 text-white'
           }`}
         >
           {n.icon && <span className="mr-1.5 text-base align-middle">{n.icon}</span>}

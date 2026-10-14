@@ -33,7 +33,20 @@ export interface RoomSnapshot {
 }
 
 export const REACTIONS = ['👍', '😂', '😱', '🔥', '😭', '🎲', '👏', '🤬'] as const;
-export type Reaction = (typeof REACTIONS)[number];
+/** Быстрые фразы: отправляются ключом, текст берётся из таблицы на клиенте. */
+export const PHRASES = {
+  lucky: 'Ну и повезло!',
+  setup: 'Это была подстава!',
+  holdon: 'Держись!',
+  gg: 'Хорошая партия!',
+  hurry: 'Ходи уже!',
+  revenge: 'Я отомщу!',
+  oops: 'Ой…',
+  sorry: 'Извини 😅',
+} as const;
+export type PhraseKey = keyof typeof PHRASES;
+export type Reaction = (typeof REACTIONS)[number] | PhraseKey;
+export const ALL_REACTIONS: readonly string[] = [...REACTIONS, ...Object.keys(PHRASES)];
 
 export interface ReactionEvent {
   playerId: string;
