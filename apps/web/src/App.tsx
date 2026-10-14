@@ -9,11 +9,14 @@ import { useLocalGame } from './game/useLocalGame';
 import { loadCredentials, useOnlineGame } from './game/useOnlineGame';
 import { THEME_NAMES, THEMES, loadTheme, type Theme } from './game/theme';
 import { ProfileScreen } from './components/ProfileScreen';
-import { loadStore, unlockedCosmetics } from './game/profile';
+import { loadStore, saveStore, unlockedCosmetics } from './game/profile';
 import { setVoice } from './game/commentator';
 import { useAccount } from './game/useAccount';
 import { AccountScreen } from './components/AccountScreen';
-import { setPremium } from './game/profile';
+import { claimDaily, dailyStatus, getProfile, openChest, ownedItems, setPremium, type ChestResult } from './game/profile';
+import { DailyModal } from './components/DailyModal';
+import { ChestModal } from './components/ChestModal';
+import { pickChallenge } from './game/challenges';
 import { Avatar } from './components/Avatar';
 import type { LocalPlayerSetup } from './game/useLocalGame';
 
@@ -63,13 +66,56 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
   }, []);
   const toggleTheme = () =>
     setTheme((t) => {
-      // тема Modern открывается достижением «Дизайнер» у любого профиля на устройстве
+      // доски открываются достижениями, сундуками и премиумом у любого профиля на устройстве
       const store = loadStore();
       const open = new Set<string>(['wood', 'light']);
-      for (const p of Object.values(store.profiles)) for (const th of unlockedCosmetics(p).themes) open.add(th);
+      for (const p of Object.values(store.profiles)) {
+        for (const th of unlockedCosmetics(p).themes) open.add(th);
+        for (const k of ownedItems(p)) if (k.startsWith('board:')) open.add(k.slice(6));
+      }
       const order = THEMES.filter((x) => open.has(x));
       return order[(order.indexOf(t) + 1) % order.length] ?? 'wood';
     });
+  // ---- ежедневная награда и сундуки для активного профиля (аккаунт или последний человек за устройством)
+  const activeName = (() => {
+    if (account.me) return account.me.name;
+    const fromSetup = game.lastSetup?.find((p) => !p.isBot)?.nickname;
+    if (fromSetup) return fromSetup;
+    try {
+      const last = localStorage.getItem('blokha.lastHuman') ?? localStorage.getItem('blokha.nick');
+      if (last) return last;
+    } catch {
+      /* ignore */
+    }
+    const profiles = Object.values(loadStore().profiles).sort((a, b) => b.updatedAt - a.updatedAt);
+    return profiles[0]?.name ?? '';
+  })();
+  const [dailyTick, setDailyTick] = useState(0);
+  const [chestOpen, setChestOpen] = useState(false);
+  const activeProfile = activeName ? getProfile(loadStore(), activeName) : null;
+  void dailyTick;
+  const daily = activeProfile && activeProfile.totals.games > 0 ? dailyStatus(activeProfile) : null;
+  const claimDailyNow = () => {
+    if (!activeName) return;
+    const store = loadStore();
+    const p = getProfile(store, activeName);
+    claimDaily(p);
+    saveStore(store);
+    setDailyTick((v) => v + 1);
+    if (p.chests > 0) setChestOpen(true);
+  };
+  const openChestNow = (): ChestResult | null => {
+    if (!activeName) return null;
+    const store = loadStore();
+    const p = getProfile(store, activeName);
+    const r = openChest(p);
+    saveStore(store);
+    setDailyTick((v) => v + 1);
+    return r;
+  };
+  const chestsCount = activeProfile?.chests ?? 0;
+  // ---- испытание партии: одинаковое для всех участников
+  const localChallenge = game.state ? pickChallenge(`${game.state.players.map((p) => p.id).join(',')}:${localSeries.games}`) : null;
   useEffect(() => {
     try {
       localStorage.setItem('blokha.theme', theme);
@@ -85,7 +131,13 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
     if (nick) void online.join(code, nick);
     else setPendingCode(code);
   };
-  const invitesEl = <InviteToasts invites={online.invites} onAccept={acceptInvite} onDismiss={online.dismissInvite} />;
+  const invitesEl = (
+    <>
+      <InviteToasts invites={online.invites} onAccept={acceptInvite} onDismiss={online.dismissInvite} />
+      {screen === 'home' && daily?.claimable && activeProfile && <DailyModal name={activeProfile.name} count={daily.count} rewardDay={daily.reward.day} onClaim={claimDailyNow} />}
+      {chestOpen && <ChestModal chests={chestsCount} onOpen={openChestNow} onClose={() => setChestOpen(false)} />}
+    </>
+  );
 
   if (screen === 'account') {
     return (
@@ -131,6 +183,7 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
           gamesPlayed={room.gamesPlayed}
           humanIds={online.myPlayerId ? [online.myPlayerId] : []}
           hardBotPresent={room.seats.some((s) => s.isBot && s.botLevel === 'hard')}
+          challenge={pickChallenge(`${room.code}:${room.gamesPlayed}`)}
           banner={bannerWithActions}
           onRematch={isHost ? () => { void online.newGame().then((err) => { if (!err) setTimeout(() => void online.start(), 300); }); } : undefined}
           rematchLabel="Реванш!"
@@ -182,6 +235,7 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
         humanIds={humans}
         hardBotPresent={hard}
         stake={stake}
+        challenge={localChallenge}
         onRematch={() => {
           const setup = game.lastSetup;
           if (!setup) return;
@@ -204,6 +258,12 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
           initialRows={rematchRows}
           onStake={setStake}
           onStart={(players) => {
+            const human = players.find((p) => !p.isBot);
+            try {
+              if (human) localStorage.setItem('blokha.lastHuman', human.nickname);
+            } catch {
+              /* ignore */
+            }
             game.start(players);
             setScreen('game');
           }}
@@ -227,6 +287,11 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
           <button type="button" data-testid="profile" onClick={() => setScreen('profile')} className="btn-secondary py-3 rounded-xl font-bold">
             🏅 Профиль, достижения, лидеры
           </button>
+          {chestsCount > 0 && (
+            <button type="button" data-testid="open-chests" onClick={() => setChestOpen(true)} className="btn-primary py-3 rounded-xl font-black animate-pulse">
+              🎁 Открыть сундук ({chestsCount})
+            </button>
+          )}
           <button type="button" data-testid="account" onClick={() => setScreen('account')} className="btn-secondary py-3 rounded-xl font-bold">
             {account.me ? `👤 ${account.me.name} · друзья` : '👤 Войти через Telegram · друзья'}
           </button>

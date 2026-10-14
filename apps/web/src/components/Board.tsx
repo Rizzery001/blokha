@@ -58,7 +58,7 @@ function cellCenter(cell: Cell): { x: number; y: number } {
 interface Props {
   state: GameState;
   overrides: AnimOverrides;
-  theme: 'wood' | 'modern';
+  theme: string;
   selectableActions: LegalAction[];
   onPieceClick: (pieceId: string) => void;
   flashCell: Cell | null;

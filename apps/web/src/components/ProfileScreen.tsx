@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Avatar } from './Avatar';
-import { LIFETIME, dailyQuests, getProfile, leaderboard, levelFromXp, loadStore, monthKey, saveStore, today, unlockedCosmetics, type Store } from '../game/profile';
+import { LIFETIME, dailyQuests, getProfile, leaderboard, levelFromXp, loadStore, monthKey, openChest, ownedItems, personalAchievements, saveStore, today, unlockedCosmetics, type ChestResult, type Store } from '../game/profile';
+import { ALL_ITEMS, BOARDS, FRAMES, PIECE_SET_ITEMS, CHEST_AVATARS, RARITY_COLOR, RARITY_LABEL, itemKey } from '../game/collection';
+import { ChestModal } from './ChestModal';
 import { setVoice } from '../game/commentator';
 
 const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
@@ -9,7 +11,8 @@ export function ProfileScreen({ onBack, initialName }: { onBack: () => void; ini
   const [store, setStore] = useState<Store>(loadStore);
   const names = Object.values(store.profiles).map((p) => p.name).sort((a, b) => a.localeCompare(b, 'ru'));
   const [name, setName] = useState(() => (store.profiles[initialName.toLowerCase()] ? initialName : names[0] ?? initialName));
-  const [tab, setTab] = useState<'profile' | 'achievements' | 'leaders'>('profile');
+  const [tab, setTab] = useState<'profile' | 'achievements' | 'collection' | 'leaders'>('profile');
+  const [chestOpen, setChestOpen] = useState(false);
   const profile = store.profiles[name.toLowerCase()] ?? null;
   const lvl = profile ? levelFromXp(profile.xp) : null;
   const quests = dailyQuests();
@@ -17,6 +20,20 @@ export function ProfileScreen({ onBack, initialName }: { onBack: () => void; ini
   const leadersAll = useMemo(() => leaderboard(store, null), [store]);
   const leadersMonth = useMemo(() => leaderboard(store, month), [store, month]);
   const unlocked = unlockedCosmetics(profile);
+  const owned = ownedItems(profile);
+  const openOne = (): ChestResult | null => {
+    if (!profile) return null;
+    const r = openChest(profile);
+    saveStore(store);
+    setStore({ ...store });
+    return r;
+  };
+  const setFrame = (id: string) => {
+    if (!profile) return;
+    profile.frame = id;
+    saveStore(store);
+    setStore({ ...store });
+  };
   const toggleVoice = () => {
     const next = { ...store, settings: { ...store.settings, voice: !store.settings.voice } };
     saveStore(next);
@@ -38,7 +55,7 @@ export function ProfileScreen({ onBack, initialName }: { onBack: () => void; ini
         )}
       </div>
       <div className="mt-3 flex gap-1 text-sm">
-        {([['profile', 'Уровень и задания'], ['achievements', 'Достижения'], ['leaders', 'Лидеры']] as const).map(([t, label]) => (
+        {([['profile', 'Уровень и задания'], ['achievements', 'Достижения'], ['collection', 'Коллекция'], ['leaders', 'Лидеры']] as const).map(([t, label]) => (
           <button key={t} type="button" onClick={() => setTab(t)} className={`px-3 py-1.5 rounded-lg font-bold ${tab === t ? 'bg-yellow-400 text-stone-900' : 'bg-stone-700'}`}>{label}</button>
         ))}
       </div>
@@ -48,7 +65,7 @@ export function ProfileScreen({ onBack, initialName }: { onBack: () => void; ini
       {tab === 'profile' && profile && lvl && (
         <div className="mt-4 space-y-3">
           <div className="panel rounded-2xl p-4 flex items-center gap-4">
-            <Avatar emoji={profile.avatar} color="#d99a06" size={64} active />
+            <Avatar emoji={profile.avatar} color="#d99a06" size={64} active frame={profile.frame} />
             <div className="flex-1 min-w-0">
               <div className="text-xl font-black truncate">{profile.name}</div>
               <div className="text-sm" style={{ color: 'var(--muted)' }}>Уровень {lvl.level} · {lvl.title}</div>
@@ -58,6 +75,10 @@ export function ProfileScreen({ onBack, initialName }: { onBack: () => void; ini
               <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{lvl.into} / {lvl.need} опыта · всего {profile.xp}</div>
             </div>
           </div>
+          {profile.chests > 0 && (
+            <button type="button" onClick={() => setChestOpen(true)} className="btn-primary w-full py-3 rounded-xl font-black animate-pulse" data-testid="profile-chests">🎁 Открыть сундук ({profile.chests})</button>
+          )}
+          <div className="text-xs" style={{ color: 'var(--muted)' }}>🔥 Серия входов: {profile.streak.count} дн. · сундуки дают победы, задания дня и 3-й, 5-й, 7-й день серии</div>
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center">
             {[['Партий', profile.totals.games], ['Побед', profile.totals.wins], ['Выбил', profile.totals.captures], ['Кругов', profile.totals.laps], ['Шестёрок', profile.totals.sixes], ['Серия побед', profile.totals.bestWinStreak]].map(([k, v]) => (
               <div key={String(k)} className="panel rounded-xl py-2">
@@ -97,11 +118,28 @@ export function ProfileScreen({ onBack, initialName }: { onBack: () => void; ini
         </div>
       )}
 
+      {tab === 'achievements' && profile && (
+        <div className="mt-4 panel rounded-2xl p-4">
+          <div className="font-black">Личная статистика</div>
+          <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {personalAchievements(profile).map((a) => (
+              <div key={a.id} className={`rounded-xl p-2.5 flex gap-2 items-center ${a.done ? 'bg-amber-400/10 border border-amber-400/40' : 'bg-stone-700/30'}`}>
+                <span className="text-xl">{a.icon}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-black truncate">{a.title}</div>
+                  <div className="text-[11px]" style={{ color: 'var(--muted)' }}>{a.description}</div>
+                </div>
+                <div className="font-black text-sm" style={{ fontVariantNumeric: 'tabular-nums' }}>{a.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {tab === 'achievements' && (
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
           {LIFETIME.map((a) => {
             const got = profile?.unlocked[a.id];
-            const cur = profile ? Math.min(profile.totals[a.metric], a.target) : 0;
+            const cur = profile ? Math.min(profile.totals[a.metric] as number, a.target) : 0;
             return (
               <div key={a.id} className={`panel rounded-xl p-3 flex gap-3 ${got ? '' : 'opacity-75'}`}>
                 <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-2xl ${got ? 'bg-amber-400/20 border border-amber-400/60' : 'bg-stone-700/50 grayscale'}`}>{got ? a.icon : '🔒'}</div>
@@ -114,6 +152,35 @@ export function ProfileScreen({ onBack, initialName }: { onBack: () => void; ini
               </div>
             );
           })}
+        </div>
+      )}
+
+      {tab === 'collection' && (
+        <div className="mt-4 space-y-4">
+          {[['Доски', BOARDS], ['Наборы фигур', PIECE_SET_ITEMS], ['Рамки профиля', FRAMES], ['Аватары из сундуков', CHEST_AVATARS]].map(([title, list]) => (
+            <div key={String(title)} className="panel rounded-2xl p-4">
+              <div className="font-black">{title as string} <span className="text-xs font-medium" style={{ color: 'var(--muted)' }}>({(list as typeof ALL_ITEMS).filter((i) => owned.has(itemKey(i))).length}/{(list as typeof ALL_ITEMS).length})</span></div>
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {(list as typeof ALL_ITEMS).map((i) => {
+                  const has = owned.has(itemKey(i));
+                  const icon = i.kind === 'avatar' ? i.id : i.kind === 'board' ? '🎨' : i.kind === 'frame' ? '🖼️' : '♟️';
+                  return (
+                    <div key={itemKey(i)} className={`rounded-xl p-2.5 flex gap-2 items-start ${has ? '' : 'opacity-60'}`} style={{ border: `1px solid ${has ? RARITY_COLOR[i.rarity] : 'rgba(128,128,128,0.25)'}` }}>
+                      <span className="text-2xl">{has ? icon : '🔒'}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-black">{i.title} <span className="text-[10px] font-medium uppercase" style={{ color: RARITY_COLOR[i.rarity] }}>{RARITY_LABEL[i.rarity]}</span></div>
+                        {i.lore && <div className="text-[11px]" style={{ color: 'var(--muted)' }}>{i.lore}</div>}
+                        {!has && <div className="text-[10px] mt-0.5" style={{ color: 'var(--muted)' }}>{i.source === 'chest' ? 'выпадает из сундука' : i.source === 'premium' ? 'премиум' : 'за достижение'}</div>}
+                        {has && i.kind === 'frame' && profile && (
+                          <button type="button" onClick={() => setFrame(i.id)} className={`mt-1 text-[11px] px-2 py-0.5 rounded ${profile.frame === i.id ? 'bg-yellow-400 text-stone-900' : 'bg-stone-700'}`}>{profile.frame === i.id ? 'выбрана' : 'выбрать'}</button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -145,8 +212,10 @@ export function ProfileScreen({ onBack, initialName }: { onBack: () => void; ini
           ))}
         </div>
       )}
+      {chestOpen && profile && <ChestModal chests={profile.chests} onOpen={openOne} onClose={() => setChestOpen(false)} />}
     </div>
   );
 }
 
 export { getProfile };
+

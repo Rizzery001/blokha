@@ -2,6 +2,7 @@ import { createGame, type Cell, type GameEvent, type GameState, type PlayerSetup
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { newAchievements, type Achievement } from './achievements';
 import { sfx } from './sound';
+import { haptic } from './haptics';
 import { commentate, speak } from './commentator';
 import { tutorialHint } from './tutorial';
 import { loadStore, saveStore } from './profile';
@@ -246,9 +247,11 @@ export function usePresenter(): Presenter {
         setLastRoll(e.value);
         setRolling(false);
         sfx.land();
+        haptic.light();
         if (e.sixBonusGranted) {
           notify('Шестёрка! +1 бросок', 'good');
           sfx.six();
+          haptic.success();
         }
         await sleep(DICE_SETTLE_MS);
       } else if (e.type === 'moved') {
@@ -288,6 +291,7 @@ export function usePresenter(): Presenter {
         setShake(true);
         setTimeout(() => setShake(false), 500);
         sfx.capture();
+        haptic.heavy();
         notify(`${name(e.byPlayerId)} выбил фигуру: ${name(e.victimPlayerId)} → в резерв`, 'good');
         await sleep(STEP_MS);
         {
@@ -320,6 +324,7 @@ export function usePresenter(): Presenter {
         await sleep(FAST ? 0 : 500);
       } else if (e.type === 'gameFinished') {
         sfx.win();
+        haptic.success();
       }
     }
     setOverrides({});
@@ -338,6 +343,7 @@ export function usePresenter(): Presenter {
         notify(`${next.players.find((p) => p.id === playerId)?.nickname ?? ''}: ${achievement.title} — ${achievement.description}`, 'achievement', achievement.icon);
       }
       sfx.achievement();
+      haptic.medium();
     }
     commit(next);
     pushLog(next, events);

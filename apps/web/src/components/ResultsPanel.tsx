@@ -103,7 +103,7 @@ export function ResultsPanel({ state, achievements, series, gamesPlayed, capture
             void lvl;
             return (
               <div key={d.name} className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 text-xs">
-                <b>{d.name}</b>: +{d.xpGained} опыта
+                <b>{d.name}</b>: +{d.xpGained} опыта{d.challengeXp > 0 ? ` (из них ${d.challengeXp} за испытание)` : ''}{d.chestsGained > 0 ? ` · 🎁 +${d.chestsGained} сундук` : ''}
                 {d.levelAfter > d.levelBefore && <span className="ml-1 font-black text-amber-300">⬆ уровень {d.levelAfter}!</span>}
                 {d.newLifetime.map((a) => (
                   <span key={a.id} className="ml-2">{a.icon} {a.title}{a.unlocks ? ` (открыто: ${a.unlocks.label})` : ''}</span>

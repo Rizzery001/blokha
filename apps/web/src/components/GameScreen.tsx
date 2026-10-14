@@ -11,6 +11,8 @@ import { PlayerPanel } from './PlayerPanel';
 import { ReactionBar } from './ReactionBar';
 import { ResultsPanel } from './ResultsPanel';
 import { Toasts } from './Toasts';
+import { RaceBar, decisiveRollValues } from './RaceBar';
+import type { Challenge } from '../game/challenges';
 import { Avatar } from './Avatar';
 import { CaptureFlightLayer } from './CaptureFlightLayer';
 import { THEME_NAMES, type Theme } from '../game/theme';
@@ -45,6 +47,7 @@ interface Props {
   stake?: string;
   onRematch?: (() => void) | undefined;
   rematchLabel?: string;
+  challenge?: Challenge | null;
 }
 
 /** Что произойдёт, если выбрать этот ход (для подсказки). */
@@ -69,7 +72,7 @@ function describeAction(game: GameController, a: LegalAction): string {
   return parts.join(' · ');
 }
 
-export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel = '← Новая партия', banner, canStartNew = true, series = {}, gamesPlayed = 0, humanIds = [], hardBotPresent = false, stake = '', onRematch, rematchLabel = 'Реванш!' }: Props) {
+export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel = '← Новая партия', banner, canStartNew = true, series = {}, gamesPlayed = 0, humanIds = [], hardBotPresent = false, stake = '', onRematch, rematchLabel = 'Реванш!', challenge = null }: Props) {
   const { state } = game;
   const logRef = useRef<HTMLDivElement>(null);
   const [logOpen, setLogOpen] = useState(false);
@@ -126,7 +129,7 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
         appliedFor.current = key;
         const inGame: Record<string, number> = {};
         for (const [pid, list] of Object.entries(game.achievements)) inGame[pid] = list.length;
-        const res = applyOutcome(state, humanIds, game.botIds, hardBotPresent, game.steps, inGame);
+        const res = applyOutcome(state, humanIds, game.botIds, hardBotPresent, game.steps, inGame, { challenge, landings: game.landings });
         setDeltas(res.deltas);
       }
     }
@@ -146,6 +149,7 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
   const moveActions = choosing ? state.legalActions.filter((a) => a.type === 'move') : [];
   const targets: Cell[] = choosing ? state.legalActions.map((a) => a.to) : [];
   const winner = finished ? state.players.find((p) => p.id === state.winnerId) : undefined;
+  const decisive = !finished && state.phase === 'awaitingRoll' ? decisiveRollValues(state) : [];
   const preview = choosing && hoverPiece ? state.legalActions.find((a) => a.pieceId === hoverPiece) ?? null : null;
   const blockedHints = choosing
     ? state.blockedPieces
@@ -185,6 +189,7 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
       {choosing && preview && <span className="font-medium" style={{ color: 'var(--select)' }}> — {describeAction(game, preview)}</span>}
       {game.animating && <span className="font-medium" style={{ color: 'var(--muted)' }}> …</span>}
       {reminder && myTurn && <span className="font-medium text-amber-300"> ⏰ ваш ход!</span>}
+      {decisive.length > 0 && <span className="font-black text-amber-300"> · решающий бросок: нужна {decisive[0]}!</span>}
     </>
   );
 
@@ -257,6 +262,13 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
             </div>
           </div>
           {banner}
+          {challenge && !finished && (
+            <div className="w-full max-w-[min(94vw,640px)] rounded-lg px-3 py-1.5 text-xs flex items-center gap-2 bg-violet-900/40 border border-violet-400/40" data-testid="challenge">
+              <span className="text-base">{challenge.icon}</span>
+              <span><b>Испытание партии: {challenge.title}.</b> {challenge.description}</span>
+            </div>
+          )}
+          {!finished && <RaceBar state={state} />}
           {game.replaying && <div className="w-full max-w-[min(94vw,640px)] rounded-lg bg-sky-900/70 text-sky-100 text-sm px-3 py-2">▶ Повтор партии…</div>}
           {game.error && <div className="w-full max-w-[min(94vw,640px)] rounded-lg bg-rose-900/70 text-rose-100 text-sm px-3 py-2">{game.error}</div>}
 
@@ -269,7 +281,7 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
           <Board
             state={state}
             overrides={game.overrides}
-            theme={theme === 'modern' ? 'modern' : 'wood'}
+            theme={theme}
             selectableActions={moveActions}
             onPieceClick={onPieceClick}
             onPieceHover={setHoverPiece}

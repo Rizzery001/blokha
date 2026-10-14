@@ -2,7 +2,11 @@
  * Профили игроков на этом устройстве: опыт, уровни, достижения за всё время, открытая косметика,
  * задания дня, история партий. Хранятся в localStorage по имени игрока.
  */
-import type { GameState, PlayerStats } from '@blokha/game-engine';
+import type { Corner, GameState, PlayerStats } from '@blokha/game-engine';
+import { ALL_ITEMS, itemKey, rollChest, type Item } from './collection';
+import type { Challenge } from './challenges';
+
+export type NumericTotal = Exclude<keyof Totals, 'winsByCorner' | 'penaltyByCell'>;
 
 export interface Totals {
   games: number;
@@ -21,6 +25,14 @@ export interface Totals {
   comebackWins: number;
   bestSixStreak: number;
   achievementsInGame: number;
+  /** побед по стартовому углу */
+  winsByCorner: Record<string, number>;
+  /** попаданий на штрафные клетки по клеткам */
+  penaltyByCell: Record<string, number>;
+  /** суммарно бросков во всех партиях, чтобы считать среднюю длину */
+  turnsTotal: number;
+  chestsOpened: number;
+  loginDays: number;
 }
 
 export interface GameRecord {
@@ -55,6 +67,14 @@ export interface Profile {
   name: string;
   avatar: string;
   xp: number;
+  /** ежедневная серия входов */
+  streak: { last: string; count: number; claimedToday: boolean };
+  /** неоткрытые сундуки */
+  chests: number;
+  /** инвентарь: ключ предмета → количество */
+  items: Record<string, number>;
+  /** выбранная рамка профиля */
+  frame: string;
   totals: Totals;
   /** id достижения за всё время → когда открыто */
   unlocked: Record<string, number>;
@@ -74,7 +94,7 @@ export interface Store {
 const KEY = 'blokha.store.v1';
 
 export function emptyTotals(): Totals {
-  return { games: 0, wins: 0, captures: 0, captured: 0, sixes: 0, rolls: 0, laps: 0, finished: 0, bonusCells: 0, penaltyCells: 0, winStreak: 0, bestWinStreak: 0, hardBotWins: 0, comebackWins: 0, bestSixStreak: 0, achievementsInGame: 0 };
+  return { games: 0, wins: 0, captures: 0, captured: 0, sixes: 0, rolls: 0, laps: 0, finished: 0, bonusCells: 0, penaltyCells: 0, winStreak: 0, bestWinStreak: 0, hardBotWins: 0, comebackWins: 0, bestSixStreak: 0, achievementsInGame: 0, winsByCorner: {}, penaltyByCell: {}, turnsTotal: 0, chestsOpened: 0, loginDays: 0 };
 }
 export function emptyDay(date = today()): Profile['day'] {
   return { date, counters: { games: 0, wins: 0, captures: 0, sixes: 0, laps: 0, bonusCells: 0, finished: 0, lapsUnharmed: 0 }, claimed: [] };
@@ -116,9 +136,15 @@ export function getProfile(store: Store, name: string, avatar = '🦊'): Profile
   const key = name.trim().toLowerCase();
   let p = store.profiles[key];
   if (!p) {
-    p = { name: name.trim(), avatar, xp: 0, totals: emptyTotals(), unlocked: {}, day: emptyDay(), createdAt: Date.now(), updatedAt: Date.now() };
+    p = { name: name.trim(), avatar, xp: 0, streak: { last: '', count: 0, claimedToday: false }, chests: 0, items: {}, frame: 'none', totals: emptyTotals(), unlocked: {}, day: emptyDay(), createdAt: Date.now(), updatedAt: Date.now() };
     store.profiles[key] = p;
   }
+  // миграция старых профилей
+  p.streak ??= { last: '', count: 0, claimedToday: false };
+  p.chests ??= 0;
+  p.items ??= {};
+  p.frame ??= 'none';
+  p.totals = { ...emptyTotals(), ...p.totals };
   if (p.day.date !== today()) p.day = emptyDay();
   return p;
 }
@@ -145,7 +171,7 @@ export interface LifetimeAchievement {
   icon: string;
   title: string;
   description: string;
-  metric: keyof Totals;
+  metric: NumericTotal;
   target: number;
   /** открывает косметику */
   unlocks?: { kind: 'avatar' | 'pieceSet' | 'theme'; id: string; label: string };
@@ -168,7 +194,40 @@ export const LIFETIME: LifetimeAchievement[] = [
   { id: 'comeback-1', icon: '🐢', title: 'Камбэк', description: 'Победить, будучи последним по фигурам на финише в середине партии', metric: 'comebackWins', target: 1, unlocks: { kind: 'avatar', id: '🐢', label: 'аватар 🐢' } },
   { id: 'six-streak-3', icon: '⚡', title: 'Молния', description: 'Три шестёрки подряд', metric: 'bestSixStreak', target: 3 },
   { id: 'theme-modern', icon: '🎨', title: 'Дизайнер', description: 'Сыграть 3 партии', metric: 'games', target: 3, unlocks: { kind: 'theme', id: 'modern', label: 'тема Modern' } },
+  { id: 'chests-10', icon: '🎁', title: 'Кладоискатель', description: 'Открыть 10 сундуков', metric: 'chestsOpened', target: 10 },
+  { id: 'login-7', icon: '📅', title: 'Неделя подряд', description: 'Заходить в игру 7 дней', metric: 'loginDays', target: 7, unlocks: { kind: 'avatar', id: '🧿', label: 'аватар 🧿' } },
+  { id: 'login-30', icon: '🗓️', title: 'Месяц с Блохой', description: 'Заходить в игру 30 дней', metric: 'loginDays', target: 30 },
 ];
+
+/** Личная статистика как достижения: по углам и клеткам. */
+export interface PersonalAchievement {
+  id: string;
+  icon: string;
+  title: string;
+  description: string;
+  value: string;
+  done: boolean;
+}
+export function personalAchievements(p: Profile): PersonalAchievement[] {
+  const t = p.totals;
+  const out: PersonalAchievement[] = [];
+  const cornerName: Record<string, string> = { A1: 'Угол 1', H1: 'Угол 2', H8: 'Угол 3', A8: 'Угол 4' };
+  const corners = Object.entries(t.winsByCorner ?? {}).sort((a, b) => b[1] - a[1]);
+  if (corners.length > 0) {
+    const [c, n] = corners[0]!;
+    out.push({ id: 'fav-corner', icon: '📐', title: `Хозяин: ${cornerName[c] ?? c}`, description: 'Любимый угол: больше всего побед отсюда', value: `${n} побед`, done: n >= 3 });
+  }
+  for (const [c, label] of Object.entries(cornerName)) {
+    const n = t.winsByCorner?.[c] ?? 0;
+    out.push({ id: `corner-${c}`, icon: '🏠', title: `Победа с каждого угла: ${label}`, description: 'Выиграть, стартуя с этого угла', value: n > 0 ? `${n}` : '—', done: n > 0 });
+  }
+  const cells = Object.entries(t.penaltyByCell ?? {}).sort((a, b) => b[1] - a[1]);
+  if (cells.length > 0) out.push({ id: 'unlucky-cell', icon: '🌧️', title: `Несчастная клетка: ${cells[0]![0]}`, description: 'Чаще всего попадаете на эту штрафную клетку', value: `${cells[0]![1]} раз`, done: cells[0]![1] >= 5 });
+  if (t.games > 0) out.push({ id: 'avg-len', icon: '⏱️', title: 'Средняя длина партии', description: 'Бросков на партию (всех игроков)', value: `${Math.round(t.turnsTotal / t.games)}`, done: t.games >= 5 });
+  if (t.rolls > 0) out.push({ id: 'six-rate', icon: '🎲', title: 'Доля шестёрок', description: 'Норма ≈ 16,7 %', value: `${((t.sixes / t.rolls) * 100).toFixed(1)} %`, done: t.rolls >= 100 });
+  if (t.games > 0) out.push({ id: 'winrate', icon: '📈', title: 'Процент побед', description: 'За всё время', value: `${Math.round((t.wins / t.games) * 100)} %`, done: t.games >= 10 });
+  return out;
+}
 
 /** Что открыто профилю (базовый набор всегда доступен). */
 export const BASE_AVATARS = ['🦊', '🐻', '🐼', '🦁', '🐯', '🐸', '🐵', '🐰', '🐨', '🦉', '🐧', '🦋', '🌻', '⭐', '🍕'];
@@ -196,12 +255,18 @@ export function isPremium(): boolean {
 
 export function unlockedCosmetics(profile: Profile | null): { avatars: Set<string>; pieceSets: Set<string>; themes: Set<string> } {
   if (isPremium()) {
-    return { avatars: new Set([...BASE_AVATARS, ...LIFETIME.filter((a) => a.unlocks?.kind === 'avatar').map((a) => a.unlocks!.id)]), pieceSets: new Set(['pawn', 'knight', 'rook', 'bishop', 'queen', 'king']), themes: new Set(['wood', 'light', 'modern']) };
+    return { avatars: new Set([...BASE_AVATARS, ...LIFETIME.filter((a) => a.unlocks?.kind === 'avatar').map((a) => a.unlocks!.id), ...ALL_ITEMS.filter((i) => i.kind === 'avatar').map((i) => i.id)]), pieceSets: new Set(['pawn', 'knight', 'rook', 'bishop', 'queen', 'king']), themes: new Set(ALL_ITEMS.filter((i) => i.kind === 'board').map((i) => i.id)) };
   }
   const avatars = new Set(BASE_AVATARS);
   const pieceSets = new Set(BASE_PIECE_SETS);
   const themes = new Set(BASE_THEMES);
   if (profile) {
+    for (const key of Object.keys(profile.items ?? {})) {
+      const [kind, id] = key.split(':');
+      if (kind === 'avatar' && id) avatars.add(id);
+      if (kind === 'pieceSet' && id) pieceSets.add(id);
+      if (kind === 'board' && id) themes.add(id);
+    }
     for (const a of LIFETIME) {
       if (profile.unlocked[a.id] && a.unlocks) {
         if (a.unlocks.kind === 'avatar') avatars.add(a.unlocks.id);
@@ -217,6 +282,75 @@ export function unlockedCosmetics(profile: Profile | null): { avatars: Set<strin
 export function unlockHint(kind: 'avatar' | 'pieceSet' | 'theme', id: string): string | null {
   const a = LIFETIME.find((x) => x.unlocks?.kind === kind && x.unlocks.id === id);
   return a ? `${a.icon} ${a.title}: ${a.description}` : null;
+}
+
+/** Все предметы, которыми владеет профиль (база + инвентарь + достижения + премиум). */
+export function ownedItems(profile: Profile | null): Set<string> {
+  const out = new Set<string>();
+  for (const i of ALL_ITEMS) if (i.source === 'base') out.add(itemKey(i));
+  if (profile) {
+    for (const k of Object.keys(profile.items ?? {})) out.add(k);
+    for (const a of LIFETIME) if (profile.unlocked[a.id] && a.unlocks) out.add(`${a.unlocks.kind === 'theme' ? 'board' : a.unlocks.kind}:${a.unlocks.id}`);
+  }
+  if (isPremium()) for (const i of ALL_ITEMS) out.add(itemKey(i));
+  return out;
+}
+
+export interface ChestResult {
+  item: Item;
+  duplicate: boolean;
+  xp: number;
+}
+/** Открыть один сундук профиля. */
+export function openChest(profile: Profile, random: () => number = Math.random): ChestResult | null {
+  if (profile.chests <= 0) return null;
+  profile.chests -= 1;
+  profile.totals.chestsOpened += 1;
+  const r = rollChest(ownedItems(profile), random);
+  const key = itemKey(r.item);
+  profile.items[key] = (profile.items[key] ?? 0) + 1;
+  if (r.duplicate) profile.xp += r.xp;
+  profile.updatedAt = Date.now();
+  return r;
+}
+
+// ---------- ежедневная серия ----------
+export const STREAK_REWARDS: { day: number; xp: number; chest: boolean; label: string }[] = [
+  { day: 1, xp: 10, chest: false, label: '+10 опыта' },
+  { day: 2, xp: 15, chest: false, label: '+15 опыта' },
+  { day: 3, xp: 20, chest: true, label: '+20 опыта и сундук' },
+  { day: 4, xp: 25, chest: false, label: '+25 опыта' },
+  { day: 5, xp: 30, chest: true, label: '+30 опыта и сундук' },
+  { day: 6, xp: 40, chest: false, label: '+40 опыта' },
+  { day: 7, xp: 60, chest: true, label: '+60 опыта и большой сундук (×2)' },
+];
+function yesterday(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+/** Проверить серию на сегодня; вернуть награду, если её ещё не забирали. */
+export function dailyStatus(profile: Profile): { count: number; claimable: boolean; reward: (typeof STREAK_REWARDS)[number] } {
+  const t = today();
+  let count = profile.streak.count;
+  let claimable = false;
+  if (profile.streak.last === t) claimable = !profile.streak.claimedToday;
+  else {
+    count = profile.streak.last === yesterday() ? count + 1 : 1;
+    claimable = true;
+  }
+  const idx = ((Math.max(count, 1) - 1) % 7);
+  return { count, claimable, reward: STREAK_REWARDS[idx]! };
+}
+export function claimDaily(profile: Profile): { count: number; reward: (typeof STREAK_REWARDS)[number] } | null {
+  const st = dailyStatus(profile);
+  if (!st.claimable) return null;
+  profile.streak = { last: today(), count: st.count, claimedToday: true };
+  profile.xp += st.reward.xp;
+  if (st.reward.chest) profile.chests += st.reward.day === 7 ? 2 : 1;
+  profile.totals.loginDays += 1;
+  profile.updatedAt = Date.now();
+  return { count: st.count, reward: st.reward };
 }
 
 // ---------- задания дня ----------
@@ -261,6 +395,10 @@ export interface GameOutcomeForPlayer {
   beatHardBot: boolean;
   comeback: boolean;
   inGameAchievements: number;
+  corner?: Corner;
+  penaltyByCell?: Record<string, number>;
+  turns?: number;
+  challenge?: Challenge | null;
 }
 
 export interface ProfileDelta {
@@ -270,6 +408,8 @@ export interface ProfileDelta {
   levelAfter: number;
   newLifetime: LifetimeAchievement[];
   questsDone: Quest[];
+  chestsGained: number;
+  challengeXp: number;
 }
 
 export function applyGameToProfile(store: Store, o: GameOutcomeForPlayer): ProfileDelta {
@@ -294,8 +434,17 @@ export function applyGameToProfile(store: Store, o: GameOutcomeForPlayer): Profi
   if (o.won && o.beatHardBot) t.hardBotWins += 1;
   if (o.won && o.comeback) t.comebackWins += 1;
   t.achievementsInGame += o.inGameAchievements;
+  if (o.won && o.corner) t.winsByCorner[o.corner] = (t.winsByCorner[o.corner] ?? 0) + 1;
+  for (const [cell, n] of Object.entries(o.penaltyByCell ?? {})) t.penaltyByCell[cell] = (t.penaltyByCell[cell] ?? 0) + n;
+  t.turnsTotal += o.turns ?? 0;
+  let chestsGained = 0;
+  if (o.won) {
+    p.chests += 1;
+    chestsGained += 1;
+  }
+  const challengeXp = o.challenge ? o.challenge.bonusXp(o.stats, o.won) : 0;
 
-  let xp = XP.game + (o.won ? XP.win : 0) + o.stats.captures * XP.capture + o.stats.lapsCompleted * XP.lap + o.stats.piecesFinished * XP.finished + o.inGameAchievements * XP.achievement;
+  let xp = challengeXp + XP.game + (o.won ? XP.win : 0) + o.stats.captures * XP.capture + o.stats.lapsCompleted * XP.lap + o.stats.piecesFinished * XP.finished + o.inGameAchievements * XP.achievement;
 
   const newLifetime: LifetimeAchievement[] = [];
   for (const a of LIFETIME) {
@@ -323,13 +472,15 @@ export function applyGameToProfile(store: Store, o: GameOutcomeForPlayer): Profi
       p.day.claimed.push(q.id);
       questsDone.push(q);
       xp += q.xp;
+      p.chests += 1;
+      chestsGained += 1;
     }
   }
 
   p.xp += xp;
   p.avatar = o.avatar;
   p.updatedAt = Date.now();
-  return { name: p.name, xpGained: xp, levelBefore: before, levelAfter: levelFromXp(p.xp).level, newLifetime, questsDone };
+  return { name: p.name, xpGained: xp, levelBefore: before, levelAfter: levelFromXp(p.xp).level, newLifetime, questsDone, chestsGained, challengeXp };
 }
 
 export function recordGame(store: Store, state: GameState, botIds: Set<string>) {

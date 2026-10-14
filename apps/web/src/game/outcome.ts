@@ -2,6 +2,7 @@
 import type { GameState, PlayerStats } from '@blokha/game-engine';
 import type { ReplayStep } from './usePresenter';
 import { applyGameToProfile, loadStore, recordGame, saveStore, type ProfileDelta } from './profile';
+import type { Challenge } from './challenges';
 
 export interface LuckRow {
   playerId: string;
@@ -70,7 +71,7 @@ export interface OutcomeApplied {
 }
 
 /** Записать партию в историю и начислить опыт людям (роботы не получают профиль). */
-export function applyOutcome(state: GameState, humanIds: string[], botIds: Set<string>, hardBotPresent: boolean, steps: ReplayStep[], inGameAchievements: Record<string, number>): OutcomeApplied {
+export function applyOutcome(state: GameState, humanIds: string[], botIds: Set<string>, hardBotPresent: boolean, steps: ReplayStep[], inGameAchievements: Record<string, number>, extra: { challenge?: Challenge | null; landings?: Record<string, Record<string, number>> } = {}): OutcomeApplied {
   const store = loadStore();
   recordGame(store, state, botIds);
   const deltas: ProfileDelta[] = [];
@@ -79,7 +80,13 @@ export function applyOutcome(state: GameState, humanIds: string[], botIds: Set<s
     const s = state.stats?.[id];
     if (!p || !s) continue;
     const won = state.winnerId === id;
-    deltas.push(applyGameToProfile(store, { name: p.nickname, avatar: p.avatar, won, stats: s, beatHardBot: hardBotPresent, comeback: won && isComeback(steps, id), inGameAchievements: inGameAchievements[id] ?? 0 }));
+    const penaltyByCell: Record<string, number> = {};
+    for (const [cell, n] of Object.entries(extra.landings?.[id] ?? {})) {
+      const sc = state.config.specialCells[cell];
+      if (sc && sc.type === 'turnBalance' && sc.rolls < 0) penaltyByCell[cell] = n;
+    }
+    const turns = Object.values(state.stats ?? {}).reduce((a, st) => a + st.rolls, 0);
+    deltas.push(applyGameToProfile(store, { name: p.nickname, avatar: p.avatar, won, stats: s, beatHardBot: hardBotPresent, comeback: won && isComeback(steps, id), inGameAchievements: inGameAchievements[id] ?? 0, corner: p.corner, penaltyByCell, turns, challenge: extra.challenge ?? null }));
   }
   saveStore(store);
   return { deltas };
