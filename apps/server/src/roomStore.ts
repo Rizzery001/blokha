@@ -3,6 +3,7 @@ import type { RoomStatus } from '@blokha/shared';
 
 export interface Seat {
   playerId: string;
+  accountId: number | null;
   token: string;
   nickname: string;
   corner: Corner;

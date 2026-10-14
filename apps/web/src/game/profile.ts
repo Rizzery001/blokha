@@ -175,7 +175,29 @@ export const BASE_AVATARS = ['🦊', '🐻', '🐼', '🦁', '🐯', '🐸', '�
 export const BASE_PIECE_SETS = ['pawn', 'knight', 'rook', 'bishop'];
 export const BASE_THEMES = ['wood', 'light'];
 
+let premiumGlobal = false;
+/** Премиум куплен в аккаунте: вся косметика открыта (хранится в памяти и в localStorage до следующей проверки). */
+export function setPremium(v: boolean) {
+  premiumGlobal = v;
+  try {
+    localStorage.setItem('blokha.premium', v ? '1' : '0');
+  } catch {
+    /* ignore */
+  }
+}
+export function isPremium(): boolean {
+  if (premiumGlobal) return true;
+  try {
+    return localStorage.getItem('blokha.premium') === '1';
+  } catch {
+    return false;
+  }
+}
+
 export function unlockedCosmetics(profile: Profile | null): { avatars: Set<string>; pieceSets: Set<string>; themes: Set<string> } {
+  if (isPremium()) {
+    return { avatars: new Set([...BASE_AVATARS, ...LIFETIME.filter((a) => a.unlocks?.kind === 'avatar').map((a) => a.unlocks!.id)]), pieceSets: new Set(['pawn', 'knight', 'rook', 'bishop', 'queen', 'king']), themes: new Set(['wood', 'light', 'modern']) };
+  }
   const avatars = new Set(BASE_AVATARS);
   const pieceSets = new Set(BASE_PIECE_SETS);
   const themes = new Set(BASE_THEMES);

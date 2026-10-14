@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "build": "tsc --noEmit && esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.js --external:socket.io --external:express",
+    "build": "tsc --noEmit && esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.js --external:socket.io --external:express --external:sql.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
@@ -14,11 +14,13 @@
     "@blokha/game-engine": "workspace:*",
     "@blokha/shared": "workspace:*",
     "express": "^4.21.2",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "sql.js": "^1.14.2"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^22.10.2",
+    "@types/sql.js": "^1.4.11",
     "esbuild": "^0.24.2",
     "socket.io-client": "^4.8.1",
     "tsx": "^4.19.2",

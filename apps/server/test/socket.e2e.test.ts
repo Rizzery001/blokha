@@ -18,7 +18,7 @@ const diceSeq = [6, 2, 6, 1, 4, 3, 5];
 let d = 0;
 
 beforeAll(async () => {
-  server = createBlokhaServer({ staticDir: null, botDelayMs: 5, dice: () => diceSeq[d++ % diceSeq.length]! });
+  server = await createBlokhaServer({ staticDir: null, botDelayMs: 5, dice: () => diceSeq[d++ % diceSeq.length]!, devLogin: true });
   await new Promise<void>((r) => server.http.listen(0, r));
   const addr = server.http.address();
   url = `http://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}`;

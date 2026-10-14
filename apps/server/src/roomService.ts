@@ -54,6 +54,9 @@ export class RoomService {
   private dice: () => number;
   private random: () => number;
 
+  /** вызывается при завершении партии (запись в базу аккаунтов) */
+  onFinish: ((room: Room) => void) | null = null;
+
   constructor(opts: RoomServiceOptions) {
     this.store = opts.store;
     this.dice = opts.dice ?? (() => randomInt(1, 7));
@@ -82,13 +85,14 @@ export class RoomService {
     return options.find((o) => !used.has(o)) ?? options[0]!;
   }
 
-  private makeSeat(room: Room, nickname: string, isBot: boolean): Seat {
+  private makeSeat(room: Room, nickname: string, isBot: boolean, accountId: number | null = null): Seat {
     const used = new Set(room.seats.map((s) => s.pieceSet));
     const usedColors = new Set(room.seats.map((s) => s.color));
     const usedAvatars = new Set(room.seats.map((s) => s.avatar));
     return {
       avatar: this.pick(isBot ? [...BOT_AVATARS] : [...AVATARS], usedAvatars),
       playerId: `p_${randomBytes(6).toString('hex')}`,
+      accountId,
       token: randomBytes(24).toString('hex'),
       nickname,
       corner: this.freeCorner(room),
@@ -113,6 +117,7 @@ export class RoomService {
       status: room.status,
       seats: room.seats.map((s) => ({
         playerId: s.playerId,
+        accountId: s.accountId ?? null,
         nickname: s.nickname,
         corner: s.corner,
         pieceSet: s.pieceSet,
@@ -146,7 +151,7 @@ export class RoomService {
 
   // ---------- lobby ----------
 
-  create(nicknameRaw: string): { room: Room; creds: Credentials } {
+  create(nicknameRaw: string, accountId: number | null = null): { room: Room; creds: Credentials } {
     const nickname = sanitizeNickname(nicknameRaw);
     if (!nickname) throw new RoomError('badNickname', 'Введите имя');
     const room: Room = {
@@ -161,20 +166,29 @@ export class RoomService {
       series: {},
       gamesPlayed: 0,
     };
-    const seat = this.makeSeat(room, nickname, false);
+    const seat = this.makeSeat(room, nickname, false, accountId);
     room.seats.push(seat);
     room.hostId = seat.playerId;
     this.store.save(room);
     return { room, creds: { code: room.code, playerId: seat.playerId, token: seat.token } };
   }
 
-  join(code: string, nicknameRaw: string): { room: Room; creds: Credentials } {
+  join(code: string, nicknameRaw: string, accountId: number | null = null): { room: Room; creds: Credentials } {
     const nickname = sanitizeNickname(nicknameRaw);
     if (!nickname) throw new RoomError('badNickname', 'Введите имя');
     const room = this.getRoom(code);
     if (room.status !== 'lobby') throw new RoomError('notInLobby', 'Партия уже началась');
     if (room.seats.length >= MAX_SEATS) throw new RoomError('roomFull', 'Комната заполнена');
-    const seat = this.makeSeat(room, nickname, false);
+    // игрок с аккаунтом, уже сидящий в комнате (например, с другого устройства), получает своё место
+    if (accountId !== null) {
+      const mine = room.seats.find((s) => s.accountId === accountId && !s.isBot);
+      if (mine) {
+        mine.connected = true;
+        this.store.save(room);
+        return { room, creds: { code: room.code, playerId: mine.playerId, token: mine.token } };
+      }
+    }
+    const seat = this.makeSeat(room, nickname, false, accountId);
     room.seats.push(seat);
     this.store.save(room);
     return { room, creds: { code: room.code, playerId: seat.playerId, token: seat.token } };
@@ -369,6 +383,11 @@ export class RoomService {
       room.series ??= {};
       room.gamesPlayed = (room.gamesPlayed ?? 0) + 1;
       if (result.state.winnerId) room.series[result.state.winnerId] = (room.series[result.state.winnerId] ?? 0) + 1;
+      try {
+        this.onFinish?.(room);
+      } catch (e) {
+        console.error('onFinish failed', e);
+      }
     }
     this.store.save(room);
     return { version: room.version, state: result.state, events: result.events };

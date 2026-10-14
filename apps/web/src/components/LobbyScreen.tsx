@@ -18,7 +18,7 @@ export function inviteLink(code: string): string {
   return url.toString();
 }
 
-export function LobbyScreen({ online, onLeave }: { online: OnlineGame; onLeave: () => void }) {
+export function LobbyScreen({ online, onLeave, onInviteFriends }: { online: OnlineGame; onLeave: () => void; onInviteFriends?: (() => void) | undefined }) {
   const room = online.room!;
   const me = room.seats.find((s) => s.playerId === online.myPlayerId);
   const isHost = room.hostId === online.myPlayerId;
@@ -50,9 +50,12 @@ export function LobbyScreen({ online, onLeave }: { online: OnlineGame; onLeave: 
           <div className="text-xs text-stone-400">Код комнаты</div>
           <div className="text-3xl font-black tracking-[0.3em]" data-testid="room-code">{room.code}</div>
         </div>
-        <button type="button" onClick={copy} className="ml-auto px-4 py-2 rounded-lg bg-stone-700 font-bold text-sm">
-          {copied ? 'Скопировано ✓' : 'Скопировать ссылку'}
-        </button>
+        <div className="ml-auto flex gap-2">
+          {onInviteFriends && <button type="button" onClick={onInviteFriends} className="px-3 py-2 rounded-lg bg-sky-600 text-white font-bold text-sm" data-testid="invite-friends">👥 Позвать друзей</button>}
+          <button type="button" onClick={copy} className="px-4 py-2 rounded-lg bg-stone-700 font-bold text-sm">
+            {copied ? 'Скопировано ✓' : 'Скопировать ссылку'}
+          </button>
+        </div>
       </div>
       <div className="mt-2 flex items-center gap-3">
         {qr && <img src={qr} alt="QR-код ссылки на комнату" className="w-24 h-24 sm:w-28 sm:h-28 rounded-lg" data-testid="qr" />}

@@ -11,9 +11,13 @@ import { THEME_NAMES, THEMES, loadTheme, type Theme } from './game/theme';
 import { ProfileScreen } from './components/ProfileScreen';
 import { loadStore, unlockedCosmetics } from './game/profile';
 import { setVoice } from './game/commentator';
+import { useAccount } from './game/useAccount';
+import { AccountScreen } from './components/AccountScreen';
+import { setPremium } from './game/profile';
+import { Avatar } from './components/Avatar';
 import type { LocalPlayerSetup } from './game/useLocalGame';
 
-type Screen = 'home' | 'setup' | 'game' | 'online' | 'profile';
+type Screen = 'home' | 'setup' | 'game' | 'online' | 'profile' | 'account';
 
 
 function roomFromUrl(): string {
@@ -26,9 +30,11 @@ function roomFromUrl(): string {
 
 export function App({ dice }: { dice?: DiceRoller } = {}) {
   const [urlRoom] = useState(roomFromUrl);
+  const [pendingCode, setPendingCode] = useState('');
   const [screen, setScreen] = useState<Screen>(() => (urlRoom || loadCredentials() ? 'online' : 'home'));
   const [theme, setTheme] = useState<Theme>(loadTheme);
   const game = useLocalGame(dice);
+  const account = useAccount(!dice); // в тестах (с подставным кубиком) сервер не нужен
   const [localSeries, setLocalSeries] = useState<{ wins: Record<string, number>; games: number; counted: number }>({ wins: {}, games: 0, counted: -1 });
   useEffect(() => {
     const st = game.state;
@@ -38,7 +44,18 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
       return { wins: { ...prev.wins, [st.winnerId!]: (prev.wins[st.winnerId!] ?? 0) + 1 }, games: prev.games + 1, counted: st.version };
     });
   }, [game.state]);
-  const online = useOnlineGame(screen === 'online');
+  const online = useOnlineGame(screen === 'online' || screen === 'account' || !!account.me);
+  useEffect(() => {
+    setPremium(!!account.me?.premium);
+    if (account.me) online.bindAccount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account.me?.id, account.me?.premium]);
+  // после партии отправляем профиль на сервер
+  const finishedKey = game.state?.phase === 'finished' ? `l${game.state.version}` : online.state?.phase === 'finished' ? `o${online.state.version}` : '';
+  useEffect(() => {
+    if (finishedKey && account.me) setTimeout(() => void account.syncProfile(), 1500);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finishedKey]);
   const [stake, setStake] = useState('');
   const [rematchRows, setRematchRows] = useState<LocalPlayerSetup[] | undefined>(undefined);
   useEffect(() => {
@@ -61,6 +78,22 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
     }
   }, [theme]);
 
+  const acceptInvite = (code: string, id: number) => {
+    online.dismissInvite(id);
+    const nick = account.me?.name ?? (() => { try { return localStorage.getItem('blokha.nick') ?? ''; } catch { return ''; } })();
+    setScreen('online');
+    if (nick) void online.join(code, nick);
+    else setPendingCode(code);
+  };
+  const invitesEl = <InviteToasts invites={online.invites} onAccept={acceptInvite} onDismiss={online.dismissInvite} />;
+
+  if (screen === 'account') {
+    return (
+      <Shell theme={theme} extra={invitesEl}>
+        <AccountScreen account={account} onBack={() => setScreen(online.room ? 'online' : 'home')} roomCode={online.room?.code} onInvite={online.room ? online.inviteFriend : undefined} friendsVersion={online.friendsVersion} />
+      </Shell>
+    );
+  }
   if (screen === 'online') {
     const room = online.room;
     if (room && room.status !== 'lobby' && online.state) {
@@ -114,9 +147,10 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
     }
     if (room) {
       return (
-        <Shell theme={theme}>
+        <Shell theme={theme} extra={invitesEl}>
           <LobbyScreen
             online={online}
+            onInviteFriends={account.me ? () => setScreen('account') : undefined}
             onLeave={() => {
               void online.leave();
               setScreen('home');
@@ -125,7 +159,7 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
         </Shell>
       );
     }
-    return <Shell theme={theme}><OnlineScreen online={online} initialCode={urlRoom} onBack={() => setScreen('home')} /></Shell>;
+    return <Shell theme={theme} extra={invitesEl}><OnlineScreen online={online} initialCode={pendingCode || urlRoom} initialNick={account.me?.name ?? ''} onBack={() => setScreen('home')} /></Shell>;
   }
 
   if (screen === 'profile') {
@@ -178,7 +212,7 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
     );
   }
   return (
-    <Shell theme={theme}>
+    <Shell theme={theme} extra={invitesEl}>
       <div className="min-h-full flex flex-col items-center justify-center px-4 py-10 text-center">
         <HomeHero theme={theme} />
         <h1 className="text-5xl sm:text-6xl font-black tracking-tight mt-4">БЛОХА</h1>
@@ -192,6 +226,9 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
           </button>
           <button type="button" data-testid="profile" onClick={() => setScreen('profile')} className="btn-secondary py-3 rounded-xl font-bold">
             🏅 Профиль, достижения, лидеры
+          </button>
+          <button type="button" data-testid="account" onClick={() => setScreen('account')} className="btn-secondary py-3 rounded-xl font-bold">
+            {account.me ? `👤 ${account.me.name} · друзья` : '👤 Войти через Telegram · друзья'}
           </button>
           <button type="button" onClick={toggleTheme} className="py-2 text-sm hover:underline" style={{ color: 'var(--muted)' }}>
             🎨 Тема: {THEME_NAMES[theme]}
@@ -211,8 +248,29 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
   );
 }
 
-function Shell({ theme, children }: { theme: Theme; children: ReactNode }) {
-  return <div className={`theme-${theme} app-bg min-h-full`}>{children}</div>;
+function Shell({ theme, children, extra }: { theme: Theme; children: ReactNode; extra?: ReactNode }) {
+  return (
+    <div className={`theme-${theme} app-bg min-h-full`}>
+      {children}
+      {extra}
+    </div>
+  );
+}
+
+function InviteToasts({ invites, onAccept, onDismiss }: { invites: { id: number; fromName: string; fromAvatar: string; code: string }[]; onAccept: (code: string, id: number) => void; onDismiss: (id: number) => void }) {
+  if (invites.length === 0) return null;
+  return (
+    <div className="fixed left-1/2 bottom-4 -translate-x-1/2 z-40 flex flex-col gap-2 w-[min(92vw,420px)]" data-testid="invites">
+      {invites.map((i) => (
+        <div key={i.id} className="toast rounded-2xl bg-sky-700 text-white shadow-2xl px-4 py-3 flex items-center gap-3">
+          <Avatar emoji={i.fromAvatar} color="#1c7ed6" size={36} />
+          <div className="flex-1 min-w-0 text-sm"><b>{i.fromName}</b> зовёт играть в комнату <b className="tracking-widest">{i.code}</b></div>
+          <button type="button" onClick={() => onAccept(i.code, i.id)} className="px-3 py-1.5 rounded-lg bg-yellow-400 text-stone-900 font-black text-sm">Войти</button>
+          <button type="button" onClick={() => onDismiss(i.id)} className="text-white/70 text-lg" aria-label="Закрыть">×</button>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** Мини-доска на главном экране: четыре угла и диагонали. */

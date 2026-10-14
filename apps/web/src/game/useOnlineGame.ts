@@ -1,6 +1,7 @@
 import type { Ack, ClientToServerEvents, Credentials, GameUpdate, JoinResult, Reaction, ReactionEvent, RoomSnapshot, SeatUpdate, ServerToClientEvents } from '@blokha/shared';
 import type { BotLevel } from '@blokha/game-engine';
 import { sfx } from './sound';
+import { getToken } from './account';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { usePresenter } from './usePresenter';
@@ -36,6 +37,13 @@ export type ConnStatus = 'connecting' | 'connected' | 'disconnected';
 
 export interface OnlineGame extends GameController {
   room: RoomSnapshot | null;
+  /** входящие приглашения друзей в комнату */
+  invites: { id: number; fromName: string; fromAvatar: string; code: string }[];
+  dismissInvite: (id: number) => void;
+  inviteFriend: (friendId: number) => Promise<string | null>;
+  friendsVersion: number;
+  /** привязать сокет к аккаунту (после входа) */
+  bindAccount: () => void;
   credentials: Credentials | null;
   conn: ConnStatus;
   create: (nickname: string) => Promise<string | null>;
@@ -59,6 +67,9 @@ export function useOnlineGame(enabled: boolean): OnlineGame {
   const [conn, setConn] = useState<ConnStatus>('connecting');
   const [error, setError] = useState<string | null>(null);
   const [reactions, setReactions] = useState<{ id: number; playerId: string; emoji: string }[]>([]);
+  const [invites, setInvites] = useState<{ id: number; fromName: string; fromAvatar: string; code: string }[]>([]);
+  const inviteId = useRef(1);
+  const [friendsVersion, setFriendsVersion] = useState(0);
   const reactionId = useRef(1);
   const socketRef = useRef<C | null>(null);
   const credsRef = useRef<Credentials | null>(credentials);
@@ -104,6 +115,8 @@ export function useOnlineGame(enabled: boolean): OnlineGame {
     socketRef.current = s;
     s.on('connect', () => {
       setConn('connected');
+      const t = getToken();
+      if (t) (s as Socket).emit('auth:bind', { authToken: t }, () => undefined);
       const c = credsRef.current;
       if (c) {
         (s as Socket).emit('room:resume', c, (r: Ack<unknown>) => {
@@ -124,6 +137,12 @@ export function useOnlineGame(enabled: boolean): OnlineGame {
       setRoom(snap);
       if (snap.status === 'lobby' && stateRef.current) reset();
     });
+    s.on('friend:invite', (inv) => {
+      const id = inviteId.current++;
+      setInvites((prev) => [...prev.slice(-3), { id, fromName: inv.fromName, fromAvatar: inv.fromAvatar, code: inv.code }]);
+      sfx.reaction();
+    });
+    s.on('friends:changed', () => setFriendsVersion((v) => v + 1));
     s.on('room:reaction', (r: ReactionEvent) => {
       const id = reactionId.current++;
       setReactions((prev) => [...prev.slice(-6), { id, playerId: r.playerId, emoji: r.emoji }]);
@@ -153,8 +172,23 @@ export function useOnlineGame(enabled: boolean): OnlineGame {
     [emit],
   );
 
-  const create = useCallback(async (nickname: string) => applyJoin(await emit('room:create', { nickname })), [applyJoin, emit]);
-  const join = useCallback(async (code: string, nickname: string) => applyJoin(await emit('room:join', { code, nickname })), [applyJoin, emit]);
+  const withAuth = <T extends object>(p: T) => {
+    const t = getToken();
+    return t ? { ...p, authToken: t } : p;
+  };
+  const create = useCallback(async (nickname: string) => applyJoin(await emit('room:create', withAuth({ nickname }))), [applyJoin, emit]);
+  const join = useCallback(async (code: string, nickname: string) => applyJoin(await emit('room:join', withAuth({ code, nickname }))), [applyJoin, emit]);
+  const inviteFriend = useCallback(async (friendId: number) => {
+    const code = room?.code;
+    if (!code) return 'Сначала создайте комнату';
+    const r = await emit('friend:invite', { friendId, code });
+    return r.ok ? null : r.error?.message ?? 'Ошибка';
+  }, [emit, room?.code]);
+  const dismissInvite = useCallback((id: number) => setInvites((prev) => prev.filter((i) => i.id !== id)), []);
+  const bindAccount = useCallback(() => {
+    const t = getToken();
+    if (t && socketRef.current) (socketRef.current as Socket).emit('auth:bind', { authToken: t }, () => undefined);
+  }, []);
   const updateSeat = useCallback((u: SeatUpdate) => wrap('room:updateSeat', u), [wrap]);
   const addBot = useCallback((level: BotLevel = 'normal') => wrap('room:addBot', { level }), [wrap]);
   const setBotLevel = useCallback((playerId: string, level: BotLevel) => wrap('room:setBotLevel', { playerId, level }), [wrap]);
@@ -211,6 +245,11 @@ export function useOnlineGame(enabled: boolean): OnlineGame {
     choose,
     error,
     room,
+    invites,
+    dismissInvite,
+    inviteFriend,
+    friendsVersion,
+    bindAccount,
     credentials,
     conn,
     create,

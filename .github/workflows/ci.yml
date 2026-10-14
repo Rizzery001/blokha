@@ -24,8 +24,9 @@ jobs:
       - name: E2E (Playwright, production server)
         run: |
           pnpm exec playwright install --with-deps chromium
-          (cd apps/server && PORT=3001 BOT_DELAY_MS=30 node dist/index.js &) 
+          (cd apps/server && PORT=3001 BOT_DELAY_MS=30 DEV_LOGIN=1 TELEGRAM_POLLING=0 node dist/index.js &) 
           sleep 3
           node e2e/local-game.mjs http://localhost:3001
           node e2e/bot-game.mjs http://localhost:3001
           node e2e/online-room.mjs http://localhost:3001
+          node e2e/friends.mjs http://localhost:3001

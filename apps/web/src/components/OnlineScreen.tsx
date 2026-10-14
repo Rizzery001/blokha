@@ -10,8 +10,8 @@ function loadNick(): string {
   }
 }
 
-export function OnlineScreen({ online, initialCode, onBack }: { online: OnlineGame; initialCode: string; onBack: () => void }) {
-  const [nickname, setNickname] = useState(loadNick);
+export function OnlineScreen({ online, initialCode, onBack, initialNick = '' }: { online: OnlineGame; initialCode: string; onBack: () => void; initialNick?: string }) {
+  const [nickname, setNickname] = useState(() => initialNick || loadNick());
   const [code, setCode] = useState(initialCode);
   const [busy, setBusy] = useState(false);
   const saveNick = (n: string) => {

@@ -17,6 +17,22 @@
 
 Вручную на сервере: `ssh root@<ip> /opt/bots/clause/deploy/deploy.sh blokha`, логи `docker logs -f deploy-blokha-1`.
 
+## Telegram: вход, друзья, Mini App и платежи Stars
+
+Нужен бот в Telegram (один раз, 5 минут, всё в приложении Telegram):
+
+1. Откройте [@BotFather](https://t.me/BotFather) → `/newbot` → имя «Блоха», username, например `blokha_game_bot`.
+   BotFather пришлёт **токен** вида `123456789:AA...` — это секрет.
+2. `/setdomain` → выберите бота → введите `blokha-104-248-243-31.sslip.io` (нужно для кнопки входа на сайте).
+3. `/newapp` → выберите бота → название «Блоха», описание, картинка 640×360, URL `https://blokha-104-248-243-31.sslip.io`,
+   короткое имя `play`. Получится ссылка Mini App `https://t.me/<username>/play`: внутри Telegram вход автоматический.
+4. Платежи Stars включены у любого бота по умолчанию; баланс Stars бота виден в @BotFather → Bot Settings → Payments.
+
+Затем добавьте два секрета в GitHub → clause-bot → Settings → Secrets → Actions:
+`BLOKHA_TELEGRAM_BOT_TOKEN` (токен) и `BLOKHA_TELEGRAM_BOT_USERNAME` (username без @).
+Следующий деплой запишет их в `/opt/bots/blokha/.env` на сервере, и вход, друзья и магазин заработают.
+База аккаунтов лежит в Docker-томе `blokha_data` (файл `/data/blokha.sqlite`), переживает редеплои.
+
 ## Любой VPS / Docker
 
 ```bash

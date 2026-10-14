@@ -8,6 +8,7 @@ export type RoomStatus = 'lobby' | 'playing' | 'finished';
 
 export interface SeatView {
   playerId: string;
+  accountId: number | null;
   nickname: string;
   corner: Corner;
   pieceSet: string;
@@ -105,8 +106,11 @@ export interface GameUpdate {
 
 /** Клиент → сервер (все с ack-колбэком). */
 export interface ClientToServerEvents {
-  'room:create': (payload: { nickname: string }, ack: (r: Ack<JoinResult>) => void) => void;
-  'room:join': (payload: { code: string; nickname: string }, ack: (r: Ack<JoinResult>) => void) => void;
+  'room:create': (payload: { nickname: string; authToken?: string }, ack: (r: Ack<JoinResult>) => void) => void;
+  'room:join': (payload: { code: string; nickname: string; authToken?: string }, ack: (r: Ack<JoinResult>) => void) => void;
+  /** привязать сокет к аккаунту (присутствие онлайн и приглашения друзей) */
+  'auth:bind': (payload: { authToken: string }, ack: (r: Ack<{ accountId: number }>) => void) => void;
+  'friend:invite': (payload: { friendId: number; code: string }, ack: (r: Ack) => void) => void;
   'room:resume': (payload: Credentials, ack: (r: Ack<JoinResult>) => void) => void;
   'room:updateSeat': (payload: SeatUpdate, ack: (r: Ack) => void) => void;
   'room:start': (payload: Record<string, never>, ack: (r: Ack) => void) => void;
@@ -127,6 +131,8 @@ export interface ServerToClientEvents {
   'room:state': (room: RoomSnapshot) => void;
   'game:update': (update: GameUpdate) => void;
   'room:reaction': (reaction: ReactionEvent) => void;
+  'friend:invite': (invite: { fromName: string; fromAvatar: string; code: string; at: number }) => void;
+  'friends:changed': () => void;
 }
 
 export const ROOM_CODE_LENGTH = 6;
@@ -139,4 +145,19 @@ export function normalizeRoomCode(input: string): string {
 
 export function sanitizeNickname(input: string): string {
   return input.replace(/\s+/g, ' ').trim().slice(0, NICKNAME_MAX);
+}
+
+/** HTTP API аккаунтов (все ответы JSON; токен в заголовке Authorization: Bearer <token>). */
+export interface AccountInfo {
+  id: number;
+  name: string;
+  username: string | null;
+  photoUrl: string | null;
+  avatar: string;
+  friendCode: string;
+}
+export interface FriendsResponse {
+  friends: (AccountInfo & { online: boolean; wins: number; games: number })[];
+  incoming: AccountInfo[];
+  outgoing: AccountInfo[];
 }
