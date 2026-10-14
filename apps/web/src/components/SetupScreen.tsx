@@ -1,4 +1,6 @@
 import { CORNERS, type BotLevel, type Corner } from '@blokha/game-engine';
+import { AVATARS, BOT_AVATARS } from '@blokha/shared';
+import { Avatar } from './Avatar';
 import type { LocalPlayerSetup } from '../game/useLocalGame';
 import { useState } from 'react';
 import { CORNER_INFO, PIECE_SETS, PLAYER_COLORS, cornerTitle } from '../game/pieceSets';
@@ -9,7 +11,6 @@ export const BOT_LEVELS: { id: BotLevel; name: string }[] = [
   { id: 'normal', name: 'Обычный' },
   { id: 'hard', name: 'Сильный' },
 ];
-import { PieceGlyph } from './Board';
 
 interface Row {
   nickname: string;
@@ -18,22 +19,24 @@ interface Row {
   color: string;
   isBot: boolean;
   botLevel: BotLevel;
+  avatar: string;
 }
 
 const DEFAULT_ROWS: Row[] = [
-  { nickname: 'Игрок 1', corner: 'A1', pieceSet: 'pawn', color: PLAYER_COLORS[0]!.id, isBot: false, botLevel: 'normal' },
-  { nickname: 'Робот Шура', corner: 'H8', pieceSet: 'knight', color: PLAYER_COLORS[1]!.id, isBot: true, botLevel: 'normal' },
-  { nickname: 'Робот Кеша', corner: 'H1', pieceSet: 'rook', color: PLAYER_COLORS[2]!.id, isBot: true, botLevel: 'easy' },
-  { nickname: 'Робот Фима', corner: 'A8', pieceSet: 'bishop', color: PLAYER_COLORS[3]!.id, isBot: true, botLevel: 'hard' },
+  { nickname: 'Игрок 1', corner: 'A1', pieceSet: 'pawn', color: PLAYER_COLORS[0]!.id, isBot: false, botLevel: 'normal', avatar: '🦊' },
+  { nickname: 'Робот Шура', corner: 'H8', pieceSet: 'knight', color: PLAYER_COLORS[1]!.id, isBot: true, botLevel: 'normal', avatar: '🤖' },
+  { nickname: 'Робот Кеша', corner: 'H1', pieceSet: 'rook', color: PLAYER_COLORS[2]!.id, isBot: true, botLevel: 'easy', avatar: '👾' },
+  { nickname: 'Робот Фима', corner: 'A8', pieceSet: 'bishop', color: PLAYER_COLORS[3]!.id, isBot: true, botLevel: 'hard', avatar: '🛸' },
 ];
 
 export function buildPlayers(rows: Row[]): LocalPlayerSetup[] {
-  return rows.map((r, i) => ({ id: `p${i + 1}`, nickname: r.nickname.trim() || `Игрок ${i + 1}`, corner: r.corner, pieceSet: r.pieceSet, color: r.color, isBot: r.isBot, botLevel: r.botLevel }));
+  return rows.map((r, i) => ({ id: `p${i + 1}`, nickname: r.nickname.trim() || `Игрок ${i + 1}`, corner: r.corner, pieceSet: r.pieceSet, color: r.color, isBot: r.isBot, botLevel: r.botLevel, avatar: r.avatar }));
 }
 
 export function SetupScreen({ onStart, onBack }: { onStart: (players: LocalPlayerSetup[]) => void; onBack: () => void }) {
   const [count, setCount] = useState(2);
   const [rows, setRows] = useState<Row[]>(DEFAULT_ROWS);
+  const [avatarPicker, setAvatarPicker] = useState<number | null>(null);
   const active = rows.slice(0, count);
   const cornerDup = new Set(active.map((r) => r.corner)).size !== active.length;
   const update = (i: number, patch: Partial<Row>) => setRows((prev) => prev.map((r, k) => (k === i ? { ...r, ...patch } : r)));
@@ -63,9 +66,9 @@ export function SetupScreen({ onStart, onBack }: { onStart: (players: LocalPlaye
         {active.map((row, i) => (
           <div key={i} className="panel rounded-xl p-3 flex flex-col gap-3" style={{ borderLeft: `5px solid ${row.color}` }} data-testid={`player-row-${i}`}>
             <div className="flex items-center gap-2">
-              <span className="w-10 h-10 shrink-0 inline-block">
-                <PieceGlyph color={row.color} glyph={row.pieceSet} index={i + 1} size="small" />
-              </span>
+              <button type="button" onClick={() => setAvatarPicker(avatarPicker === i ? null : i)} className="shrink-0" title="Выбрать аватар" aria-label="Выбрать аватар" data-testid={`avatar-${i}`}>
+                <Avatar emoji={row.avatar} color={row.color} size={40} />
+              </button>
               <input
                 data-testid={`nick-${i}`}
                 value={row.nickname}
@@ -90,13 +93,22 @@ export function SetupScreen({ onStart, onBack }: { onStart: (players: LocalPlaye
               <button
                 type="button"
                 data-testid={`bot-${i}`}
-                onClick={() => update(i, { isBot: !row.isBot })}
+                onClick={() => update(i, { isBot: !row.isBot, avatar: !row.isBot ? '🤖' : AVATARS[i % AVATARS.length]! })}
                 className={`shrink-0 px-3 py-2 rounded-lg text-sm font-bold whitespace-nowrap ${row.isBot ? 'bg-sky-500 text-white' : 'bg-stone-700 text-stone-200'}`}
                 title="Кем играет это место"
               >
                 {row.isBot ? '🤖 Робот' : '🙂 Человек'}
               </button>
             </div>
+            {avatarPicker === i && (
+              <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Аватар">
+                {[...(row.isBot ? BOT_AVATARS : []), ...AVATARS].map((a) => (
+                  <button key={a} type="button" role="radio" aria-checked={row.avatar === a} onClick={() => { update(i, { avatar: a }); setAvatarPicker(null); }} className={`w-9 h-9 rounded-lg text-xl ${row.avatar === a ? 'bg-yellow-400' : 'bg-stone-700'}`}>
+                    {a}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <div className="flex items-center gap-1">
                 <span className="text-xs mr-1" style={{ color: 'var(--muted)' }}>Угол</span>

@@ -11,6 +11,8 @@ import {
   type GameEvent,
 } from '@blokha/game-engine';
 import {
+  AVATARS,
+  BOT_AVATARS,
   ROOM_CODE_ALPHABET,
   ROOM_CODE_LENGTH,
   sanitizeNickname,
@@ -83,7 +85,9 @@ export class RoomService {
   private makeSeat(room: Room, nickname: string, isBot: boolean): Seat {
     const used = new Set(room.seats.map((s) => s.pieceSet));
     const usedColors = new Set(room.seats.map((s) => s.color));
+    const usedAvatars = new Set(room.seats.map((s) => s.avatar));
     return {
+      avatar: this.pick(isBot ? [...BOT_AVATARS] : [...AVATARS], usedAvatars),
       playerId: `p_${randomBytes(6).toString('hex')}`,
       token: randomBytes(24).toString('hex'),
       nickname,
@@ -113,6 +117,7 @@ export class RoomService {
         corner: s.corner,
         pieceSet: s.pieceSet,
         color: s.color,
+        avatar: s.avatar,
         connected: s.connected,
         isHost: s.playerId === room.hostId,
         isBot: s.isBot,
@@ -214,6 +219,10 @@ export class RoomService {
       if (!/^#[0-9a-f]{6}$/i.test(update.color)) throw new RoomError('badRequest', 'Неверный цвет');
       seat.color = update.color;
     }
+    if (update.avatar !== undefined) {
+      if (!(AVATARS as readonly string[]).includes(update.avatar)) throw new RoomError('badRequest', 'Неизвестный аватар');
+      seat.avatar = update.avatar;
+    }
     this.store.save(room);
     return room;
   }
@@ -259,10 +268,14 @@ export class RoomService {
       target.botLevel = 'normal';
       target.token = randomBytes(24).toString('hex'); // старый токен больше не даёт управлять местом
       target.nickname = `🤖 ${target.nickname}`.slice(0, 24);
+      target.avatar = '🤖';
       target.connected = true;
       if (room.game) {
         const gp = room.game.players.find((p) => p.id === target.playerId);
-        if (gp) gp.nickname = target.nickname;
+        if (gp) {
+          gp.nickname = target.nickname;
+          gp.avatar = '🤖';
+        }
       }
     }
     this.store.save(room);
@@ -311,7 +324,7 @@ export class RoomService {
     if (room.status !== 'lobby') throw new RoomError('notInLobby', 'Партия уже идёт');
     if (room.seats.length < MIN_SEATS) throw new RoomError('tooFewPlayers', 'Нужно минимум два игрока');
     const { state, events } = createGame({
-      players: room.seats.map((s) => ({ id: s.playerId, nickname: s.nickname, corner: s.corner, pieceSet: s.pieceSet, color: s.color })),
+      players: room.seats.map((s) => ({ id: s.playerId, nickname: s.nickname, corner: s.corner, pieceSet: s.pieceSet, color: s.color, avatar: s.avatar })),
     });
     room.game = state;
     room.status = 'playing';

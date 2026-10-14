@@ -7,17 +7,10 @@ import { OnlineScreen } from './components/OnlineScreen';
 import { SetupScreen } from './components/SetupScreen';
 import { useLocalGame } from './game/useLocalGame';
 import { loadCredentials, useOnlineGame } from './game/useOnlineGame';
+import { THEME_NAMES, loadTheme, nextTheme, type Theme } from './game/theme';
 
 type Screen = 'home' | 'setup' | 'game' | 'online';
-type Theme = 'wood' | 'modern';
 
-function loadTheme(): Theme {
-  try {
-    return localStorage.getItem('blokha.theme') === 'modern' ? 'modern' : 'wood';
-  } catch {
-    return 'wood';
-  }
-}
 
 function roomFromUrl(): string {
   try {
@@ -42,7 +35,7 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
     });
   }, [game.state]);
   const online = useOnlineGame(screen === 'online');
-  const toggleTheme = () => setTheme((t) => (t === 'wood' ? 'modern' : 'wood'));
+  const toggleTheme = () => setTheme((t) => nextTheme(t));
   useEffect(() => {
     try {
       localStorage.setItem('blokha.theme', theme);
@@ -155,7 +148,7 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
             Онлайн-комната
           </button>
           <button type="button" onClick={toggleTheme} className="py-2 text-sm hover:underline" style={{ color: 'var(--muted)' }}>
-            Настройки · тема: {theme === 'wood' ? 'Classic Wood' : 'Modern'}
+            🎨 Тема: {THEME_NAMES[theme]}
           </button>
         </div>
         <div className="mt-8 text-xs" style={{ color: 'var(--muted)' }}>Четыре стартовых угла: 1 слева внизу, 2 справа внизу, 3 справа вверху, 4 слева вверху. Семь особых клеток:</div>
@@ -178,10 +171,11 @@ function Shell({ theme, children }: { theme: Theme; children: ReactNode }) {
 
 /** Мини-доска на главном экране: четыре угла и диагонали. */
 function HomeHero({ theme }: { theme: Theme }) {
+  const boardTheme = theme === 'modern' ? 'modern' : 'wood';
   const colors = ['#e8590c', '#1c7ed6', '#2f9e44', '#9c36b5'];
   const homes: Record<string, number> = { '0,7': 0, '7,7': 1, '7,0': 2, '0,0': 3, '1,6': 0, '2,5': 0, '3,4': 0, '6,6': 1, '5,5': 1, '4,4': 1, '6,1': 2, '5,2': 2, '4,3': 2, '1,1': 3, '2,2': 3, '3,3': 3 };
   return (
-    <div className={`theme-${theme} board-frame rounded-xl p-1.5 w-40 h-40 sm:w-48 sm:h-48`} aria-hidden>
+    <div className={`theme-${boardTheme} board-frame rounded-xl p-1.5 w-40 h-40 sm:w-48 sm:h-48`} aria-hidden>
       <div className="grid grid-cols-8 grid-rows-8 w-full h-full rounded-sm overflow-hidden board-grid">
         {Array.from({ length: 64 }, (_, i) => {
           const x = i % 8;

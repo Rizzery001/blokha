@@ -8,6 +8,7 @@ export interface Seat {
   corner: Corner;
   pieceSet: string;
   color: string;
+  avatar: string;
   connected: boolean;
   isBot: boolean;
   botLevel: BotLevel;

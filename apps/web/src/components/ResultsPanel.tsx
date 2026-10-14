@@ -1,6 +1,7 @@
 import type { GameState, PlayerStats } from '@blokha/game-engine';
 import { finalAwards } from '../game/achievements';
 import type { Achievement } from '../game/achievements';
+import { Avatar } from './Avatar';
 
 interface Props {
   state: GameState;
@@ -52,7 +53,7 @@ export function ResultsPanel({ state, achievements, series, gamesPlayed }: Props
             return (
               <tr key={p.id} className={p.id === state.winnerId ? 'font-black' : ''}>
                 <td className="py-1 truncate max-w-[120px]">
-                  <span className="inline-block w-2.5 h-2.5 rounded-full mr-1.5 align-middle" style={{ background: p.color }} />
+                  <span className="inline-block mr-1.5 align-middle"><Avatar emoji={p.avatar} color={p.color} size={20} /></span>
                   {p.id === state.winnerId ? '🏆 ' : ''}{p.nickname}
                 </td>
                 {COLS.map((c) => (

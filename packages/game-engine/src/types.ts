@@ -27,9 +27,10 @@ export interface PlayerState {
   pieces: Piece[];
   bonusRollsRemaining: number;
   skippedTurnsRemaining: number;
-  /** косметика: набор фигур и цвет */
+  /** косметика: набор фигур, цвет, аватар (эмодзи) */
   pieceSet: string;
   color: string;
+  avatar: string;
 }
 
 export type SpecialCellConfig =

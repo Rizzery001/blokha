@@ -85,6 +85,16 @@ export interface ArrowOverlay {
   kind: 'autoForward' | 'autoBackward';
 }
 
+export interface CaptureFlight {
+  id: number;
+  cell: Cell;
+  playerId: string;
+  pieceId: string;
+  color: string;
+  kind: string;
+  index: number;
+}
+
 /** Общее для локальной и онлайн-игры: состояние, журнал, анимации. Расчёт движения — в движке/на сервере. */
 export interface Presenter {
   state: GameState | null;
@@ -100,6 +110,8 @@ export interface Presenter {
   captureCell: Cell | null;
   /** тряска доски (выбивание) */
   shake: boolean;
+  /** вылет выбитой фишки с клетки к резерву владельца */
+  flight: CaptureFlight | null;
   /** достижения за партию: playerId → список */
   achievements: Record<string, Achievement[]>;
   /** принять новое состояние с событиями: анимировать и опубликовать */
@@ -128,6 +140,8 @@ export function usePresenter(): Presenter {
   const logId = useRef(1);
   const noticeId = useRef(1);
   const [shake, setShake] = useState(false);
+  const [flight, setFlight] = useState<CaptureFlight | null>(null);
+  const flightId = useRef(1);
   const [achievements, setAchievements] = useState<Record<string, Achievement[]>>({});
   const notify = useCallback((text: string, tone: Notice['tone'], icon?: string) => {
     const id = noticeId.current++;
@@ -216,10 +230,16 @@ export function usePresenter(): Presenter {
         setTimeout(() => setShake(false), 500);
         sfx.capture();
         notify(`${name(e.byPlayerId)} выбил фигуру: ${name(e.victimPlayerId)} → в резерв`, 'good');
-        await sleep(STEP_MS * 2);
+        await sleep(STEP_MS);
+        {
+          const victim = next.players.find((p) => p.id === e.victimPlayerId);
+          const idx = victim ? victim.pieces.findIndex((p) => p.id === e.victimPieceId) + 1 : 1;
+          if (victim) setFlight({ id: flightId.current++, cell: e.cell, playerId: victim.id, pieceId: e.victimPieceId, color: victim.color, kind: victim.pieceSet, index: idx });
+        }
         ov[e.victimPieceId] = '__reserve' as Cell;
         setOverrides({ ...ov });
-        await sleep(STEP_MS * 3);
+        await sleep(FAST ? 0 : 700);
+        setFlight(null);
         setFlashCell(null);
         setCaptureCell(null);
       } else if (e.type === 'autoMoveCancelled') {
@@ -307,5 +327,5 @@ export function usePresenter(): Presenter {
     setAchievements({});
   }, [commit]);
 
-  return { state, log, animating, overrides, lastRoll, rolling, flashCell, notices, arrow, captureCell, shake, achievements, ingest, setImmediate, startFresh, reset, stateRef, setRolling, busy: animating || rolling };
+  return { state, log, animating, overrides, lastRoll, rolling, flashCell, notices, arrow, captureCell, shake, flight, achievements, ingest, setImmediate, startFresh, reset, stateRef, setRolling, busy: animating || rolling };
 }

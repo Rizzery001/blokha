@@ -11,6 +11,9 @@ import { PlayerPanel } from './PlayerPanel';
 import { ReactionBar } from './ReactionBar';
 import { ResultsPanel } from './ResultsPanel';
 import { Toasts } from './Toasts';
+import { Avatar } from './Avatar';
+import { CaptureFlightLayer } from './CaptureFlightLayer';
+import { THEME_NAMES, type Theme } from '../game/theme';
 
 const BLOCK_TEXT: Record<string, string> = {
   inReserveNeedsSix: 'нужна шестёрка',
@@ -25,7 +28,7 @@ const TURN_REMINDER_MS = 45_000;
 
 interface Props {
   game: GameController;
-  theme: 'wood' | 'modern';
+  theme: Theme;
   onToggleTheme: () => void;
   onNewGame: () => void;
   newGameLabel?: string;
@@ -148,7 +151,7 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
 
   const statusText = finished && winner ? null : (
     <>
-      <span className="inline-block w-3 h-3 rounded-full mr-2 align-middle" style={{ background: cur.color }} />
+      <span className="inline-block mr-2 align-middle"><Avatar emoji={cur.avatar} color={cur.color} size={26} /></span>
       {cur.nickname}
       {isBotTurn && <span className="text-sky-300 font-medium"> 🤖 думает…</span>}
       {waitingOther && !isBotTurn && <span className="font-medium" style={{ color: 'var(--muted)' }}> — ждём ход{state.phase === 'awaitingAction' ? ` (выпало ${state.currentRoll})` : ''}</span>}
@@ -191,6 +194,7 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
   return (
     <div className={`theme-${theme} app-bg min-h-full`}>
       <Toasts notices={game.notices} />
+      <CaptureFlightLayer flight={game.flight} />
       <div className="min-h-full flex flex-col lg:flex-row gap-3 px-2 sm:px-4 py-2 sm:py-4 max-w-6xl mx-auto">
         <div className="flex-1 flex flex-col items-center gap-2 sm:gap-3 min-w-0">
           <div className="w-full max-w-[min(94vw,640px)] flex items-center justify-between text-sm gap-2">
@@ -200,7 +204,7 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
                 {muted ? '🔇 Звук выкл' : '🔊 Звук'}
               </button>
               <button type="button" onClick={onToggleTheme} className="hover:underline" style={{ color: 'var(--muted)' }} data-testid="toggle-theme">
-                {theme === 'wood' ? 'Classic Wood' : 'Modern'}
+                🎨 {THEME_NAMES[theme]}
               </button>
             </div>
           </div>
@@ -216,7 +220,7 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
           <Board
             state={state}
             overrides={game.overrides}
-            theme={theme}
+            theme={theme === 'modern' ? 'modern' : 'wood'}
             selectableActions={moveActions}
             onPieceClick={onPieceClick}
             onPieceHover={setHoverPiece}
@@ -278,7 +282,7 @@ export function GameScreen({ game, theme, onToggleTheme, onNewGame, newGameLabel
             <Confetti color={winner.color} />
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-20" data-testid="victory">
               <div className="panel rounded-3xl p-5 sm:p-7 text-center max-w-lg w-full animate-pop shadow-2xl max-h-[92vh] overflow-y-auto" style={{ borderColor: 'var(--accent)', borderWidth: 2 }}>
-                <div className="text-6xl">🏆</div>
+                <div className="flex items-center justify-center gap-3"><span className="text-5xl">🏆</span><Avatar emoji={winner.avatar} color={winner.color} size={64} active /></div>
                 <div className="text-2xl font-black mt-2" style={{ color: winner.color }}>{winner.nickname}</div>
                 <div className="mt-1" style={{ color: 'var(--muted)' }}>заполнил всю свою финишную диагональ!</div>
                 <div className="mt-4">

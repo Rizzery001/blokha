@@ -4,6 +4,8 @@ import QRCode from 'qrcode';
 import type { BotLevel } from '@blokha/game-engine';
 import { BOT_LEVELS } from './SetupScreen';
 import { CORNER_INFO, PIECE_SETS, PLAYER_COLORS, cornerName, cornerTitle } from '../game/pieceSets';
+import { AVATARS } from '@blokha/shared';
+import { Avatar } from './Avatar';
 import { CornerIcon } from './CornerIcon';
 import type { OnlineGame } from '../game/useOnlineGame';
 import { PieceGlyph } from './Board';
@@ -69,7 +71,8 @@ export function LobbyScreen({ online, onLeave }: { online: OnlineGame; onLeave: 
           return (
             <div key={seat.playerId} data-testid={`seat-${i}`} className={`rounded-xl p-3 bg-stone-800/70 border-2 ${mine ? 'border-yellow-400' : 'border-stone-700'}`}>
               <div className="flex items-center gap-2">
-                <span className="w-10 h-10 inline-block"><PieceGlyph color={seat.color} glyph={seat.pieceSet} index={i + 1} size="small" /></span>
+                <Avatar emoji={seat.avatar} color={seat.color} size={40} />
+                <span className="w-9 h-9 inline-block"><PieceGlyph color={seat.color} glyph={seat.pieceSet} index={i + 1} size="small" /></span>
                 <span className="font-black truncate">{seat.isBot ? '🤖 ' : ''}{seat.nickname}{mine ? ' (вы)' : ''}</span>
                 {seat.isHost && <span className="text-[10px] uppercase tracking-wide bg-yellow-400/20 text-yellow-300 px-1.5 rounded">хозяин</span>}
                 {!seat.connected && !seat.isBot && <span className="text-[10px] uppercase tracking-wide bg-rose-900/50 text-rose-300 px-1.5 rounded">офлайн</span>}
@@ -120,6 +123,14 @@ export function LobbyScreen({ online, onLeave }: { online: OnlineGame; onLeave: 
                     {PIECE_SETS.map((s) => (
                       <button key={s.id} type="button" role="radio" aria-checked={me.pieceSet === s.id} title={s.name} onClick={() => online.updateSeat({ pieceSet: s.id })} className={`w-9 h-9 rounded-md text-xl leading-none ${me.pieceSet === s.id ? 'bg-yellow-400 text-stone-900' : 'bg-stone-700 text-stone-200'}`}>
                         {s.glyph}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1 flex-wrap" role="radiogroup" aria-label="Аватар">
+                    <span className="text-xs mr-1" style={{ color: 'var(--muted)' }}>Аватар</span>
+                    {AVATARS.map((a) => (
+                      <button key={a} type="button" role="radio" aria-checked={me.avatar === a} onClick={() => online.updateSeat({ avatar: a })} className={`w-8 h-8 rounded-lg text-lg ${me.avatar === a ? 'bg-yellow-400' : 'bg-stone-700'}`}>
+                        {a}
                       </button>
                     ))}
                   </div>

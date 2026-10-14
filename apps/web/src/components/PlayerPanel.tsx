@@ -1,6 +1,7 @@
 import type { GameState, LegalAction, PlayerState } from '@blokha/game-engine';
 import { PieceGlyph } from './Board';
 import { CornerIcon } from './CornerIcon';
+import { Avatar } from './Avatar';
 import { cornerName, cornerTitle } from '../game/pieceSets';
 import type { AnimOverrides } from '../game/useLocalGame';
 
@@ -48,7 +49,7 @@ export function PlayerPanel({ state, player, active, spawnAction, onSpawn, overr
         style={{ borderLeft: `4px solid ${player.color}` }}
       >
         <div className="flex items-center gap-1.5 text-xs font-black truncate">
-          {isBot ? '🤖 ' : ''}
+          <Avatar emoji={player.avatar} color={player.color} size={22} active={active} />
           {player.nickname}
           {isMe && <span className="font-medium" style={{ color: 'var(--muted)' }}>(вы)</span>}
           {disconnected && <span className="text-[9px] uppercase text-rose-300">офлайн</span>}
@@ -75,7 +76,8 @@ export function PlayerPanel({ state, player, active, spawnAction, onSpawn, overr
       style={{ borderLeft: `5px solid ${player.color}` }}
     >
       <div className="flex items-center gap-2">
-        <span className="font-black truncate">{isBot ? '🤖 ' : ''}{player.nickname}{isMe ? ' (вы)' : ''}</span>
+        <Avatar emoji={player.avatar} color={player.color} size={34} active={active} />
+        <span className="font-black truncate">{player.nickname}{isMe ? ' (вы)' : ''}</span>
         {disconnected && <span className="text-[10px] uppercase tracking-wide text-rose-300 bg-rose-900/50 px-1.5 rounded">офлайн</span>}
         {seriesWins > 0 && <span className="text-[11px] text-amber-300" title="Побед в серии">🏆 {seriesWins}</span>}
         <span className="text-xs ml-auto inline-flex items-center gap-1" style={{ color: 'var(--muted)' }} title={cornerTitle(player.corner)}><CornerIcon corner={player.corner} color={player.color} size={14} /> {cornerName(player.corner).toLowerCase()}</span>

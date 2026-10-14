@@ -53,6 +53,7 @@ body {
 .app-bg {
   background: radial-gradient(ellipse 120% 80% at 50% -10%, var(--panel-2) 0%, var(--bg) 60%);
   min-height: 100%;
+  color: var(--fg);
 }
 .theme-modern .app-bg { background: radial-gradient(ellipse 120% 80% at 50% -10%, #1e2a4a 0%, var(--bg) 60%); }
 
@@ -307,3 +308,57 @@ body {
 
 /* кубик над доской: компактнее и чуть прозрачнее, чтобы не прятать фишки */
 .dice-throw { width: 15%; --half: 7.5cqw; opacity: 0.96; }
+
+/* ===== Аватары ===== */
+.avatar {
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 9999px; flex-shrink: 0; line-height: 1;
+  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--pc) 60%, white), var(--pc) 60%, color-mix(in srgb, var(--pc) 70%, black));
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.5), inset 0 -2px 3px rgba(0,0,0,0.25), 0 2px 4px rgba(0,0,0,0.35);
+  border: 2px solid rgba(255,255,255,0.35);
+}
+.avatar-active { box-shadow: inset 0 1px 1px rgba(255,255,255,0.5), 0 0 0 2px var(--select), 0 0 14px color-mix(in srgb, var(--select) 60%, transparent); }
+
+/* ===== Светлая тема: дневной свет, кремовый стол, та же деревянная доска ===== */
+.theme-light {
+  --bg: #efe4d2;
+  --panel: #fffaf2;
+  --panel-2: #f3e7d3;
+  --fg: #2b1d12;
+  --muted: #7d6a57;
+  --accent: #d99a06;
+  --accent-ink: #2a1708;
+  --good: #1f8a4c;
+  --bad: #c2362b;
+  --target: #0d8fcf;
+  --select: #e0a800;
+  --wood-light: #e6c99b;
+  --wood-light-2: #d9b57f;
+  --wood-dark: #5a2f16;
+  --wood-dark-2: #3f2010;
+  --wood-frame: #c9a26c;
+  --wood-ink: #2a1708;
+  color-scheme: light;
+}
+.theme-light.app-bg {
+  background:
+    radial-gradient(ellipse 120% 80% at 50% -10%, #fff8ea 0%, transparent 60%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    var(--bg);
+}
+.theme-light .panel { background: var(--panel); border-color: rgba(43,29,18,0.08); box-shadow: 0 1px 2px rgba(43,29,18,0.08); }
+.theme-light .btn-secondary { background: #e9dcc6; color: var(--fg); }
+/* утилиты Tailwind, использованные для тёмных контролов, перекрашиваем в светлой теме */
+.theme-light .bg-stone-900 { background-color: #fffdf8 !important; color: var(--fg); border: 1px solid rgba(43,29,18,0.15); }
+.theme-light .bg-stone-700, .theme-light .bg-stone-700\/70 { background-color: #e9dcc6 !important; color: var(--fg); }
+.theme-light .bg-stone-800\/70, .theme-light .bg-stone-800\/60 { background-color: var(--panel) !important; }
+.theme-light .text-stone-200, .theme-light .text-stone-300 { color: var(--fg) !important; }
+.theme-light .text-stone-400, .theme-light .text-stone-500 { color: var(--muted) !important; }
+.theme-light .text-stone-600 { color: #b3a38f !important; }
+.theme-light .border-stone-700 { border-color: rgba(43,29,18,0.12) !important; }
+.theme-light .ring-offset-stone-800 { --tw-ring-offset-color: var(--panel); }
+.theme-light .bg-yellow-400 { background-color: #f2c230 !important; }
+.theme-light .bg-sky-500, .theme-light .bg-sky-600 { background-color: #1c7ed6 !important; }
+.theme-light .toast { box-shadow: 0 6px 18px rgba(43,29,18,0.25); }
+.theme-light .dice-face { background: linear-gradient(145deg, #fffdf7, #ece7dc); }
+.theme-light .board-frame { box-shadow: 0 18px 40px rgba(43,29,18,0.35), inset 0 2px 0 rgba(255,255,255,0.4); }
+.theme-light .plaque-good { background: linear-gradient(160deg, #efe0a8, #c7a54d 60%, #e3c97a); }

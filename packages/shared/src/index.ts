@@ -12,6 +12,7 @@ export interface SeatView {
   corner: Corner;
   pieceSet: string;
   color: string;
+  avatar: string;
   connected: boolean;
   isHost: boolean;
   isBot: boolean;
@@ -77,7 +78,11 @@ export interface SeatUpdate {
   corner?: Corner;
   pieceSet?: string;
   color?: string;
+  avatar?: string;
 }
+
+export const AVATARS = ['🦊', '🐻', '🐼', '🦁', '🐯', '🐸', '🐵', '🐰', '🐨', '🦄', '🐲', '🐙', '🦉', '🐧', '🦋', '🌻', '⭐', '🍕', '🚀', '🎩'] as const;
+export const BOT_AVATARS = ['🤖', '👾', '🛸', '🎛️'] as const;
 
 export interface GameUpdate {
   version: number;

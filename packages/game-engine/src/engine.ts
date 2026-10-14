@@ -35,6 +35,7 @@ export interface PlayerSetup {
   corner: Corner;
   pieceSet?: string;
   color?: string;
+  avatar?: string;
 }
 
 export interface CreateGameOptions {
@@ -44,6 +45,7 @@ export interface CreateGameOptions {
 
 const DEFAULT_COLORS = ['#d9480f', '#1971c2', '#2b8a3e', '#862e9c'];
 const DEFAULT_SETS = ['pawn', 'knight', 'rook', 'bishop'];
+const DEFAULT_AVATARS = ['🦊', '🐻', '🐼', '🦁'];
 
 export function createGame(options: CreateGameOptions): CommandResult {
   const config = options.config ?? DEFAULT_BOARD_CONFIG;
@@ -67,6 +69,7 @@ export function createGame(options: CreateGameOptions): CommandResult {
     corner: p.corner,
     pieceSet: p.pieceSet ?? DEFAULT_SETS[i % DEFAULT_SETS.length]!,
     color: p.color ?? DEFAULT_COLORS[i % DEFAULT_COLORS.length]!,
+    avatar: p.avatar ?? DEFAULT_AVATARS[i % DEFAULT_AVATARS.length]!,
     bonusRollsRemaining: 0,
     skippedTurnsRemaining: 0,
     pieces: Array.from({ length: config.pieceCountPerPlayer }, (_, k) => ({

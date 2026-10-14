@@ -3,7 +3,7 @@ import { applyTurnBalance, currentPlayer, getPlayer, type PlayerState } from '..
 import { choose, newGame, place, roll, rollAndMove, setBonus, setTurn } from './helpers';
 
 function player(bonus: number): PlayerState {
-  return { id: 'x', nickname: 'x', corner: 'A1', pieces: [], bonusRollsRemaining: bonus, skippedTurnsRemaining: 0, pieceSet: 'pawn', color: '#000' };
+  return { id: 'x', nickname: 'x', corner: 'A1', pieces: [], bonusRollsRemaining: bonus, skippedTurnsRemaining: 0, pieceSet: 'pawn', color: '#000', avatar: '🦊' };
 }
 
 describe('взаимозачёт бонусов и штрафов', () => {
