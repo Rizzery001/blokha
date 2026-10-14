@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { fetchConfig, fetchMe, getToken, loginDev, loginTelegramWidget, loginWebApp, logout as apiLogout, setToken, telegramWebApp, type Me, type ServerConfig } from './account';
 import { getProfile, loadStore, saveStore, type Profile } from './profile';
-import { pullProfile, pushProfile } from './account';
+import { claimRewards, pullProfile, pushProfile } from './account';
 
 export interface AccountState {
   me: Me | null;
@@ -15,6 +15,8 @@ export interface AccountState {
   refresh: () => Promise<void>;
   /** отправить локальный профиль этого игрока на сервер (после партии) */
   syncProfile: () => Promise<void>;
+  rewardNote: string | null;
+  clearRewardNote: () => void;
 }
 
 /** Слияние профиля с сервера и локального: берём тот, где больше опыта, достижения объединяем. */
@@ -30,6 +32,7 @@ export function useAccount(enabled = true): AccountState {
   const [config, setConfig] = useState<ServerConfig | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
+  const [rewardNote, setRewardNote] = useState<string | null>(null);
   const inTelegram = typeof window !== 'undefined' && telegramWebApp() !== null;
 
   const afterLogin = useCallback(async (account: { name: string; avatar: string }) => {
@@ -50,6 +53,17 @@ export function useAccount(enabled = true): AccountState {
     if (r.ok && r.data) {
       setMe(r.data);
       setError(null);
+      // серверные награды (рефералка) → сундуки в локальный профиль
+      if (r.data.pendingRewards.length > 0) {
+        const c = await claimRewards();
+        if (c.ok && c.data && c.data.chests > 0) {
+          const store = loadStore();
+          const p = getProfile(store, r.data.name, r.data.avatar);
+          p.chests += c.data.chests;
+          saveStore(store);
+          setRewardNote(`🎁 +${c.data.chests} сундук: ${c.data.reasons.join('; ')}`);
+        }
+      }
     } else {
       if (r.error?.code === 'unauthorized') setToken(null);
       setMe(null);
@@ -119,5 +133,5 @@ export function useAccount(enabled = true): AccountState {
     if (p) await pushProfile(p);
   }, [me]);
 
-  return { me, config, loading, error, inTelegram, loginWithWidget, loginAsDev, logout, refresh, syncProfile };
+  return { me, config, loading, error, inTelegram, loginWithWidget, loginAsDev, logout, refresh, syncProfile, rewardNote, clearRewardNote: () => setRewardNote(null) };
 }

@@ -6,7 +6,7 @@ import { Server, type Socket } from 'socket.io';
 import { ALL_REACTIONS, type Ack, type ClientToServerEvents, type Credentials, type ServerToClientEvents } from '@blokha/shared';
 import { InMemoryRoomStore, type RoomStore } from './roomStore';
 import { RoomError, RoomService } from './roomService';
-import { AccountError, AccountService, verifyTelegramAuth, verifyWebAppInitData } from './accounts';
+import { AccountError, AccountService, LEAGUES, verifyTelegramAuth, verifyWebAppInitData } from './accounts';
 import { PRODUCTS, TelegramBot } from './telegram';
 import { Db } from './db';
 
@@ -77,8 +77,61 @@ export async function createBlokhaServer(opts: BlokhaServerOptions = {}): Promis
     try {
       if (!opts.telegramBotToken) throw new AccountError('badRequest', 'Вход через Telegram не настроен на сервере');
       const data = verifyWebAppInitData(String(req.body?.initData ?? ''), opts.telegramBotToken);
-      const { account, token } = accounts.loginTelegram(data);
+      const { account, token } = accounts.loginTelegram(data, typeof req.body?.ref === 'string' ? req.body.ref : null);
       res.json({ ok: true, data: { account, token } });
+    } catch (e) {
+      apiError(res, e);
+    }
+  });
+  app.post('/api/rewards/claim', (req, res) => {
+    try {
+      const me = accounts.authenticate(tokenOf(req));
+      res.json({ ok: true, data: accounts.claimRewards(me.id) });
+    } catch (e) {
+      apiError(res, e);
+    }
+  });
+  app.get('/api/ratings/top', (_req, res) => res.json({ ok: true, data: { top: accounts.topRatings(20), leagues: LEAGUES } }));
+  app.get('/api/clans/top', (_req, res) => res.json({ ok: true, data: accounts.topClans(10) }));
+  app.get('/api/clan', (req, res) => {
+    try {
+      const me = accounts.authenticate(tokenOf(req));
+      const id = accounts.myClanId(me.id);
+      res.json({ ok: true, data: id === null ? null : accounts.clan(id) });
+    } catch (e) {
+      apiError(res, e);
+    }
+  });
+  app.post('/api/clan/create', (req, res) => {
+    try {
+      const me = accounts.authenticate(tokenOf(req));
+      res.json({ ok: true, data: accounts.createClan(me.id, String(req.body?.name ?? ''), String(req.body?.emblem ?? '🛡️')) });
+    } catch (e) {
+      apiError(res, e);
+    }
+  });
+  app.post('/api/clan/join', (req, res) => {
+    try {
+      const me = accounts.authenticate(tokenOf(req));
+      res.json({ ok: true, data: accounts.joinClan(me.id, String(req.body?.code ?? '')) });
+    } catch (e) {
+      apiError(res, e);
+    }
+  });
+  app.post('/api/clan/leave', (req, res) => {
+    try {
+      const me = accounts.authenticate(tokenOf(req));
+      accounts.leaveClan(me.id);
+      res.json({ ok: true });
+    } catch (e) {
+      apiError(res, e);
+    }
+  });
+  app.post('/api/clan/kick', (req, res) => {
+    try {
+      const me = accounts.authenticate(tokenOf(req));
+      accounts.kickFromClan(me.id, Number(req.body?.accountId));
+      res.json({ ok: true });
     } catch (e) {
       apiError(res, e);
     }
@@ -108,8 +161,9 @@ export async function createBlokhaServer(opts: BlokhaServerOptions = {}): Promis
   app.post('/api/auth/telegram', (req, res) => {
     try {
       if (!opts.telegramBotToken) throw new AccountError('badRequest', 'Вход через Telegram не настроен на сервере');
-      const data = verifyTelegramAuth(req.body ?? {}, opts.telegramBotToken);
-      const { account, token } = accounts.loginTelegram(data);
+      const { ref, ...body } = (req.body ?? {}) as Record<string, unknown>;
+      const data = verifyTelegramAuth(body, opts.telegramBotToken);
+      const { account, token } = accounts.loginTelegram(data, typeof ref === 'string' ? ref : null);
       res.json({ ok: true, data: { account, token } });
     } catch (e) {
       apiError(res, e);
@@ -120,7 +174,7 @@ export async function createBlokhaServer(opts: BlokhaServerOptions = {}): Promis
       if (!opts.devLogin) throw new AccountError('badRequest', 'Dev-вход выключен');
       const name = String(req.body?.name ?? '').trim().slice(0, 40);
       if (!name) throw new AccountError('badRequest', 'Введите имя');
-      const { account, token } = accounts.loginDev(name);
+      const { account, token } = accounts.loginDev(name, typeof req.body?.ref === 'string' ? req.body.ref : null);
       res.json({ ok: true, data: { account, token } });
     } catch (e) {
       apiError(res, e);
@@ -134,7 +188,7 @@ export async function createBlokhaServer(opts: BlokhaServerOptions = {}): Promis
   app.get('/api/me', (req, res) => {
     try {
       const me = accounts.authenticate(tokenOf(req));
-      res.json({ ok: true, data: { ...me, premium: accounts.hasProduct(me.id, 'premium') } });
+      res.json({ ok: true, data: { ...me, premium: accounts.hasProduct(me.id, 'premium'), pendingRewards: accounts.pendingRewards(me.id), referrals: accounts.referralsCount(me.id), clanId: accounts.myClanId(me.id) } });
     } catch (e) {
       apiError(res, e);
     }
@@ -231,6 +285,14 @@ export async function createBlokhaServer(opts: BlokhaServerOptions = {}): Promis
     for (const s of io.sockets.sockets.values()) if (s.data.accountId === accountId) s.emit('friends:changed');
   };
   // партия завершена: записываем в базу аккаунтов для лидерборда друзей
+  service.seatExtras = (id) => {
+    try {
+      const a = accounts.getAccount(id);
+      return { rating: a.rating, league: a.league };
+    } catch {
+      return null;
+    }
+  };
   service.onFinish = (room) => {
     if (!room.game) return;
     const players = room.seats.map((seat) => ({ accountId: seat.isBot ? null : seat.accountId, name: seat.nickname, won: room.game!.winnerId === seat.playerId }));

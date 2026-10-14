@@ -32,6 +32,14 @@ export class Db {
   }
 
   private migrate() {
+    // новые колонки для старых баз
+    for (const sql of ['ALTER TABLE accounts ADD COLUMN rating INTEGER NOT NULL DEFAULT 1000', 'ALTER TABLE accounts ADD COLUMN referred_by INTEGER', 'ALTER TABLE accounts ADD COLUMN referral_rewarded INTEGER NOT NULL DEFAULT 0']) {
+      try {
+        this.db.exec(sql);
+      } catch {
+        /* колонка уже есть или таблицы ещё нет — создадим ниже */
+      }
+    }
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS accounts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,6 +47,7 @@ export class Db {
         name TEXT NOT NULL, username TEXT, photo_url TEXT, avatar TEXT NOT NULL DEFAULT '🦊',
         friend_code TEXT NOT NULL UNIQUE,
         created_at INTEGER NOT NULL, last_seen INTEGER NOT NULL,
+        rating INTEGER NOT NULL DEFAULT 1000, referred_by INTEGER, referral_rewarded INTEGER NOT NULL DEFAULT 0,
         UNIQUE(provider, provider_id)
       );
       CREATE TABLE IF NOT EXISTS sessions (
@@ -58,6 +67,18 @@ export class Db {
       CREATE TABLE IF NOT EXISTS purchases (
         id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL, product TEXT NOT NULL, stars INTEGER NOT NULL,
         charge_id TEXT NOT NULL UNIQUE, payload TEXT NOT NULL, created_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS clans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, emblem TEXT NOT NULL, code TEXT NOT NULL UNIQUE,
+        owner_id INTEGER NOT NULL, created_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS clan_members (
+        clan_id INTEGER NOT NULL, account_id INTEGER NOT NULL UNIQUE, role TEXT NOT NULL, joined_at INTEGER NOT NULL,
+        PRIMARY KEY (clan_id, account_id)
+      );
+      CREATE TABLE IF NOT EXISTS rewards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, account_id INTEGER NOT NULL, kind TEXT NOT NULL, amount INTEGER NOT NULL,
+        reason TEXT NOT NULL, created_at INTEGER NOT NULL, claimed_at INTEGER
       );
       CREATE INDEX IF NOT EXISTS idx_sessions_acc ON sessions(account_id);
       CREATE INDEX IF NOT EXISTS idx_games_time ON games(finished_at);

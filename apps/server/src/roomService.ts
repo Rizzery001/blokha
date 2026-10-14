@@ -110,6 +110,9 @@ export class RoomService {
     return room;
   }
 
+  /** подстановка рейтинга/лиги для мест с аккаунтом (задаётся сервером) */
+  seatExtras: ((accountId: number) => { rating: number; league: string } | null) | null = null;
+
   snapshot(room: Room): RoomSnapshot {
     return {
       code: room.code,
@@ -118,6 +121,7 @@ export class RoomService {
       seats: room.seats.map((s) => ({
         playerId: s.playerId,
         accountId: s.accountId ?? null,
+        ...(s.accountId && this.seatExtras ? (this.seatExtras(s.accountId) ?? {}) : {}),
         nickname: s.nickname,
         corner: s.corner,
         pieceSet: s.pieceSet,

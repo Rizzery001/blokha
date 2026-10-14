@@ -9,6 +9,8 @@ export type RoomStatus = 'lobby' | 'playing' | 'finished';
 export interface SeatView {
   playerId: string;
   accountId: number | null;
+  rating?: number;
+  league?: string;
   nickname: string;
   corner: Corner;
   pieceSet: string;
@@ -155,6 +157,8 @@ export interface AccountInfo {
   photoUrl: string | null;
   avatar: string;
   friendCode: string;
+  rating: number;
+  league: string;
 }
 export interface FriendsResponse {
   friends: (AccountInfo & { online: boolean; wins: number; games: number })[];

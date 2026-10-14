@@ -5,6 +5,7 @@ import type { BotLevel } from '@blokha/game-engine';
 import { BOT_LEVELS } from './SetupScreen';
 import { CORNER_INFO, PIECE_SETS, PLAYER_COLORS, cornerName, cornerTitle } from '../game/pieceSets';
 import { AVATARS } from '@blokha/shared';
+import { LEAGUE_INFO } from '../game/account';
 import { Avatar } from './Avatar';
 import { CornerIcon } from './CornerIcon';
 import type { OnlineGame } from '../game/useOnlineGame';
@@ -78,6 +79,7 @@ export function LobbyScreen({ online, onLeave, onInviteFriends }: { online: Onli
                 <span className="w-9 h-9 inline-block"><PieceGlyph color={seat.color} glyph={seat.pieceSet} index={i + 1} size="small" /></span>
                 <span className="font-black truncate">{seat.isBot ? '🤖 ' : ''}{seat.nickname}{mine ? ' (вы)' : ''}</span>
                 {seat.isHost && <span className="text-[10px] uppercase tracking-wide bg-yellow-400/20 text-yellow-300 px-1.5 rounded">хозяин</span>}
+                {seat.league && <span className="text-[11px]" title={`${LEAGUE_INFO[seat.league]?.title} · рейтинг ${seat.rating}`}>{LEAGUE_INFO[seat.league]?.icon} {seat.rating}</span>}
                 {!seat.connected && !seat.isBot && <span className="text-[10px] uppercase tracking-wide bg-rose-900/50 text-rose-300 px-1.5 rounded">офлайн</span>}
                 <span className="ml-auto text-sm text-stone-400 inline-flex items-center gap-1" title={cornerTitle(seat.corner)}><CornerIcon corner={seat.corner} color={seat.color} /> {cornerName(seat.corner)}</span>
                 {seat.isBot && isHost && (

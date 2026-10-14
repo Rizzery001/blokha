@@ -136,6 +136,12 @@ export function App({ dice }: { dice?: DiceRoller } = {}) {
       <InviteToasts invites={online.invites} onAccept={acceptInvite} onDismiss={online.dismissInvite} />
       {screen === 'home' && daily?.claimable && activeProfile && <DailyModal name={activeProfile.name} count={daily.count} rewardDay={daily.reward.day} onClaim={claimDailyNow} />}
       {chestOpen && <ChestModal chests={chestsCount} onOpen={openChestNow} onClose={() => setChestOpen(false)} />}
+      {account.rewardNote && (
+        <div className="fixed left-1/2 top-3 -translate-x-1/2 z-40 toast rounded-xl bg-amber-400 text-stone-900 font-bold px-4 py-2 text-sm shadow-xl flex items-center gap-2">
+          {account.rewardNote}
+          <button type="button" onClick={account.clearRewardNote} aria-label="Закрыть">×</button>
+        </div>
+      )}
     </>
   );
 

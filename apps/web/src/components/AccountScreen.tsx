@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FriendsResponse } from '@blokha/shared';
-import { createInvoice, fetchFriends, fetchFriendsLeaderboard, fetchProducts, fetchPurchases, removeFriend, requestFriend, respondFriend, telegramWebApp } from '../game/account';
+import { LEAGUE_INFO, createClan, createInvoice, fetchClan, fetchFriends, fetchFriendsLeaderboard, fetchProducts, fetchPurchases, fetchTopClans, fetchTopRatings, joinClan, kickFromClan, leaveClan, referralLink, removeFriend, requestFriend, respondFriend, telegramWebApp, type ClanView } from '../game/account';
 import type { AccountState } from '../game/useAccount';
 import { Avatar } from './Avatar';
 import { TelegramLogin } from './TelegramLogin';
@@ -26,12 +26,21 @@ export function AccountScreen({ account, onBack, roomCode, onInvite, friendsVers
   const [products, setProducts] = useState<Product[]>([]);
   const [premium, setPremium] = useState(false);
   const [devName, setDevName] = useState('');
-  const [tab, setTab] = useState<'friends' | 'shop'>('friends');
+  const [tab, setTab] = useState<'friends' | 'clan' | 'rating' | 'shop'>('friends');
+  const [clan, setClan] = useState<ClanView | null>(null);
+  const [topClans, setTopClans] = useState<{ id: number; name: string; emblem: string; members: number; rating: number }[]>([]);
+  const [clanName, setClanName] = useState('');
+  const [clanEmblem, setClanEmblem] = useState('🛡️');
+  const [clanCode, setClanCode] = useState('');
+  const [topRatings, setTopRatings] = useState<{ id: number; name: string; avatar: string; rating: number; league: string }[]>([]);
 
   const reload = useCallback(async () => {
     if (!me) return;
-    const [f, l, p, pu] = await Promise.all([fetchFriends(), fetchFriendsLeaderboard(), fetchProducts(), fetchPurchases()]);
+    const [f, l, p, pu, c, tc, tr] = await Promise.all([fetchFriends(), fetchFriendsLeaderboard(), fetchProducts(), fetchPurchases(), fetchClan(), fetchTopClans(), fetchTopRatings()]);
     if (f.ok && f.data) setFriends(f.data);
+    if (c.ok) setClan(c.data ?? null);
+    if (tc.ok && tc.data) setTopClans(tc.data);
+    if (tr.ok && tr.data) setTopRatings(tr.data.top);
     if (l.ok && l.data) setLeaders(l.data);
     if (p.ok && p.data) setProducts(p.data);
     if (pu.ok && pu.data) setPremium(pu.data.premium);
@@ -107,11 +116,12 @@ export function AccountScreen({ account, onBack, roomCode, onInvite, friendsVers
             <div className="flex-1 min-w-0">
               <div className="font-black text-lg truncate">{me.name} {premium && <span className="text-xs align-middle rounded-full bg-amber-400 text-stone-900 px-2 py-0.5 ml-1">ПРЕМИУМ</span>}</div>
               <div className="text-xs" style={{ color: 'var(--muted)' }}>{me.username ? `@${me.username} · ` : ''}код друга <button type="button" onClick={copyCode} className="font-black tracking-widest hover:underline" data-testid="friend-code">{me.friendCode}</button></div>
+              <div className="text-xs mt-0.5" title="Рейтинг по онлайн-партиям против людей">{LEAGUE_INFO[me.league]?.icon} {LEAGUE_INFO[me.league]?.title} · рейтинг <b>{me.rating}</b></div>
             </div>
             <button type="button" onClick={() => void account.logout()} className="text-xs hover:underline" style={{ color: 'var(--muted)' }}>Выйти</button>
           </div>
           <div className="mt-3 flex gap-1 text-sm">
-            {([['friends', 'Друзья'], ['shop', 'Премиум']] as const).map(([t, l]) => (
+            {([['friends', 'Друзья'], ['clan', 'Клан'], ['rating', 'Рейтинг'], ['shop', 'Премиум']] as const).map(([t, l]) => (
               <button key={t} type="button" onClick={() => setTab(t)} className={`px-3 py-1.5 rounded-lg font-bold ${tab === t ? 'bg-yellow-400 text-stone-900' : 'bg-stone-700'}`}>{l}</button>
             ))}
           </div>
@@ -119,6 +129,17 @@ export function AccountScreen({ account, onBack, roomCode, onInvite, friendsVers
 
           {tab === 'friends' && (
             <div className="mt-3 space-y-3">
+              <div className="panel rounded-2xl p-4" style={{ borderColor: 'var(--accent)', borderWidth: 1 }}>
+                <div className="font-black">🎁 Пригласить друга</div>
+                <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Друг получает сундук при входе, вы — сундук после его первой партии. Вы автоматически становитесь друзьями. Приглашено: <b>{me.referrals}</b></div>
+                <div className="mt-2 flex gap-2">
+                  <input readOnly value={referralLink(config?.telegramBot ?? null, me.friendCode)} className="flex-1 min-w-0 bg-stone-900 rounded-lg px-3 py-2 text-xs" data-testid="ref-link" />
+                  <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(referralLink(config?.telegramBot ?? null, me.friendCode)); setMsg('Ссылка скопирована'); } catch { setMsg('Скопируйте ссылку вручную'); } }} className="btn-primary px-3 rounded-lg font-bold text-sm">Копировать</button>
+                  {telegramWebApp() && (
+                    <button type="button" onClick={() => telegramWebApp()!.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(referralLink(config?.telegramBot ?? null, me.friendCode))}&text=${encodeURIComponent('Сыграем в Блоху? Семейная настольная игра онлайн')}`)} className="btn-secondary px-3 rounded-lg font-bold text-sm">Отправить</button>
+                  )}
+                </div>
+              </div>
               <div className="panel rounded-2xl p-4">
                 <div className="font-black">Добавить друга</div>
                 <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Введите код друга или @username из Telegram.</div>
@@ -169,6 +190,92 @@ export function AccountScreen({ account, onBack, roomCode, onInvite, friendsVers
                   </table>
                 </div>
               )}
+            </div>
+          )}
+
+          {tab === 'clan' && (
+            <div className="mt-3 space-y-3">
+              {!clan && (
+                <>
+                  <div className="panel rounded-2xl p-4">
+                    <div className="font-black">Создать клан</div>
+                    <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Семья или компания: общий рейтинг из побед участников за 30 дней, лента событий.</div>
+                    <div className="mt-2 flex gap-2">
+                      <select value={clanEmblem} onChange={(e) => setClanEmblem(e.target.value)} className="bg-stone-900 rounded-lg px-2 text-xl" aria-label="Герб">
+                        {['🛡️', '🦊', '🐻', '🦁', '🐉', '⚡', '🔥', '🌊', '🌲', '👑', '🎩', '🍕'].map((e) => (
+                          <option key={e} value={e}>{e}</option>
+                        ))}
+                      </select>
+                      <input value={clanName} onChange={(e) => setClanName(e.target.value)} maxLength={24} placeholder="Название клана" className="flex-1 min-w-0 bg-stone-900 rounded-lg px-3 py-2 text-sm" data-testid="clan-name" />
+                      <button type="button" data-testid="clan-create" disabled={clanName.trim().length < 2} onClick={async () => { const r = await createClan(clanName, clanEmblem); setMsg(r.ok ? 'Клан создан!' : r.error?.message ?? 'Ошибка'); void reload(); }} className="btn-primary px-3 rounded-lg font-bold text-sm disabled:opacity-40">Создать</button>
+                    </div>
+                  </div>
+                  <div className="panel rounded-2xl p-4">
+                    <div className="font-black">Вступить по коду клана</div>
+                    <div className="mt-2 flex gap-2">
+                      <input value={clanCode} onChange={(e) => setClanCode(e.target.value.toUpperCase())} placeholder="КОД" className="flex-1 min-w-0 bg-stone-900 rounded-lg px-3 py-2 text-sm tracking-widest" data-testid="clan-code" />
+                      <button type="button" data-testid="clan-join" disabled={clanCode.length < 6} onClick={async () => { const r = await joinClan(clanCode); setMsg(r.ok ? 'Вы в клане!' : r.error?.message ?? 'Ошибка'); void reload(); }} className="btn-secondary px-3 rounded-lg font-bold text-sm disabled:opacity-40">Вступить</button>
+                    </div>
+                  </div>
+                </>
+              )}
+              {clan && (
+                <div className="panel rounded-2xl p-4" data-testid="clan-view">
+                  <div className="flex items-center gap-3">
+                    <span className="text-4xl">{clan.emblem}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-black text-lg truncate">{clan.name}</div>
+                      <div className="text-xs" style={{ color: 'var(--muted)' }}>рейтинг клана <b>{clan.rating}</b> · {clan.members.length} уч. · код для вступления <b className="tracking-widest">{clan.code}</b></div>
+                    </div>
+                    <button type="button" onClick={async () => { await leaveClan(); void reload(); }} className="text-xs hover:underline" style={{ color: 'var(--muted)' }}>выйти</button>
+                  </div>
+                  <div className="mt-3 text-sm">
+                    {clan.members.map((m) => (
+                      <div key={m.id} className="flex items-center gap-2 py-1">
+                        <Avatar emoji={m.avatar} color="#2f9e44" size={26} /> <span className="flex-1 truncate">{m.name}{m.role === 'owner' ? ' 👑' : ''}</span>
+                        <span className="text-xs" style={{ color: 'var(--muted)' }}>{m.wins30} побед / {m.games30} за 30 дн.</span>
+                        {clan.ownerId === me.id && m.id !== me.id && <button type="button" onClick={async () => { await kickFromClan(m.id); void reload(); }} className="text-xs text-rose-300">исключить</button>}
+                      </div>
+                    ))}
+                  </div>
+                  {clan.feed.length > 0 && (
+                    <div className="mt-3">
+                      <div className="text-xs uppercase tracking-wide" style={{ color: 'var(--muted)' }}>Лента клана</div>
+                      {clan.feed.slice(0, 8).map((f, i) => (
+                        <div key={i} className="text-xs py-0.5">{new Date(f.at).toLocaleDateString('ru-RU')} · {f.text}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {topClans.length > 0 && (
+                <div className="panel rounded-2xl p-4">
+                  <div className="font-black">Лучшие кланы</div>
+                  {topClans.map((c, i) => (
+                    <div key={c.id} className="flex items-center gap-2 py-1 text-sm"><span>{i + 1}.</span><span className="text-lg">{c.emblem}</span><span className="flex-1 truncate">{c.name}</span><span className="text-xs" style={{ color: 'var(--muted)' }}>{c.members} уч.</span><b>{c.rating}</b></div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'rating' && (
+            <div className="mt-3 space-y-3">
+              <div className="panel rounded-2xl p-4">
+                <div className="font-black">Лиги</div>
+                <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Рейтинг считается по онлайн-партиям против людей (Эло, старт 1000). Победа отнимает очки у проигравших людей, роботы не влияют.</div>
+                <div className="mt-2 grid grid-cols-5 gap-1 text-center text-xs">
+                  {Object.entries(LEAGUE_INFO).map(([id, l]) => (
+                    <div key={id} className={`rounded-lg py-2 ${me.league === id ? 'bg-yellow-400 text-stone-900 font-black' : 'bg-stone-700/50'}`}><div className="text-xl">{l.icon}</div>{l.title}</div>
+                  ))}
+                </div>
+              </div>
+              <div className="panel rounded-2xl p-4">
+                <div className="font-black">Топ игроков</div>
+                {topRatings.map((r, i) => (
+                  <div key={r.id} className={`flex items-center gap-2 py-1 text-sm ${r.id === me.id ? 'font-black' : ''}`}><span className="w-6">{i + 1}.</span><Avatar emoji={r.avatar} color="#d99a06" size={24} /><span className="flex-1 truncate">{r.name}</span><span>{LEAGUE_INFO[r.league]?.icon}</span><b>{r.rating}</b></div>
+                ))}
+              </div>
             </div>
           )}
 
