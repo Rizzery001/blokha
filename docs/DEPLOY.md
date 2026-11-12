@@ -10,10 +10,13 @@
 и `Caddyfile` лежат в репозитории `Rizzery001/clause-bot` (`deploy/`): там сервис `blokha` и сайт
 `{$HOST_BLOKHA}`. Адрес: `https://blokha-<ip через дефисы>.sslip.io`, HTTPS выдаёт Caddy.
 
-Выкладка: job `blokha` в `clause-bot/.github/workflows/deploy.yml` берёт `main` этого репозитория,
-заливает его по SSH в `/opt/bots/blokha` и пересобирает контейнер. Запускается при каждом пуше в
-`clause-bot` и вручную: GitHub → clause-bot → Actions → deploy → Run workflow. Секреты
-`DEPLOY_SSH_KEY` и `DEPLOY_HOST` уже есть в clause-bot, в этом репозитории ничего настраивать не нужно.
+Выкладка: отдельный workflow `deploy-blokha` (`clause-bot/.github/workflows/deploy-blokha.yml`) берёт `main`
+этого репозитория, заливает его по SSH в `/opt/bots/blokha` и пересобирает контейнер. Запускается ночью
+(04:30 по Минску), если в `main` появились новые коммиты, и вручную: GitHub → clause-bot → Actions →
+deploy-blokha → Run workflow или `gh workflow run deploy-blokha.yml -R Rizzery001/clause-bot`. Слияния в
+`clause-bot` игру не пересобирают. Сборка идёт на общем сервере и на 15–20 минут замедляет соседние сервисы,
+поэтому вручную её стоит запускать, когда это никому не мешает. Секреты `DEPLOY_SSH_KEY` и `DEPLOY_HOST`
+уже есть в clause-bot, в этом репозитории ничего настраивать не нужно.
 
 Вручную на сервере: `ssh root@<ip> /opt/bots/clause/deploy/deploy.sh blokha`, логи `docker logs -f deploy-blokha-1`.
 
